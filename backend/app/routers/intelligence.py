@@ -80,7 +80,7 @@ async def search(request: SearchRequest) -> SearchResponse:
     # Get the DiskStore for this repo
     disk_store = storage_manager.get_store(repo_id, is_guest=False)
 
-    # Embed the query
+    # Embed the query with Titan v2
     try:
         query_vector = await embed_text(request.query)
     except Exception as exc:

@@ -13,6 +13,11 @@ class Settings(BaseSettings):
     # OpenRouter
     openrouter_api_key: str = ""
 
+    # AWS (for Bedrock — Titan Embeddings v2)
+    aws_region: str = "us-east-1"
+    aws_access_key_id: str = ""
+    aws_secret_access_key: str = ""
+
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"
