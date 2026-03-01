@@ -1,0 +1,25 @@
+# Core API
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+
+# Async HTTP (GitHub metadata)
+httpx==0.28.1
+
+# Config & env management
+python-dotenv==1.0.1
+pydantic-settings==2.7.1
+
+# Tree-sitter (parsing engine)
+tree-sitter==0.21.3
+tree-sitter-languages==1.10.2
+
+# Retry / exponential backoff
+tenacity==9.0.0
+
+# Phase 2 — Vector store & AI
+chromadb==0.6.3
+boto3==1.37.9          # AWS Bedrock (Titan Embeddings v2 + Claude 3.5 Sonnet)
+
+# Phase 2 — Streamlit tester (install separately in tester/ venv or use same venv)
+streamlit==1.42.2
+pandas==2.2.3

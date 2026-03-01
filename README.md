@@ -1,1 +1,52 @@
-# devlens
+# DevLens
+
+DevLens is an AI-powered onboarding navigator that acts as a "Digital Senior Mentor" for your codebase.
+
+## How to Run the Project Locally
+
+The project consists of a FastAPI backend and a Streamlit Tester UI. Both run from the `backend/` directory using Python 3.12.
+
+### 1. Prerequisites
+- Python 3.12 installed (`py -3.12 --version` on Windows)
+- Git installed and on your PATH
+
+### 2. First-Time Setup
+Open your terminal and navigate to the backend directory:
+```powershell
+cd backend
+```
+
+Create a virtual environment and install dependencies:
+```powershell
+py -3.12 -m venv .venv
+.venv\Scripts\pip install -r requirements.txt
+```
+
+### 3. Environment Variables
+Copy `.env.example` to `.env`:
+```powershell
+cp .env.example .env
+```
+Open `.env` and add:
+- `GITHUB_PAT`: Your GitHub Personal Access Token (prevents rate limits during ingestion)
+- `AWS_ACCESS_KEY_ID` & `AWS_SECRET_ACCESS_KEY`: Required for Phase 2 AI features (AWS Bedrock)
+
+---
+
+### 4. Running the Servers
+
+You need **two separate terminal windows**.
+
+**Terminal 1 — Run the FastAPI Backend:**
+```powershell
+cd backend
+.venv\Scripts\uvicorn main:app --host 127.0.0.1 --port 8000 --reload
+```
+*The API is now running at `http://127.0.0.1:8000`. You can view interactive docs at `http://127.0.0.1:8000/docs`.*
+
+**Terminal 2 — Run the Streamlit Tester UI:**
+```powershell
+cd backend
+.venv\Scripts\streamlit run tester\app.py --server.port 8501
+```
+*The UI will automatically open in your browser at `http://localhost:8501`. If you get ingestion errors, check the logs in Terminal 1.*
