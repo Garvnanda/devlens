@@ -162,26 +162,43 @@ FUNC_QUERY_MAP: dict[str, str] = {
 
 
 def _extract_imports(source: bytes, lang_name: str) -> list[str]:
-    """Use Tree-sitter to extract all import strings from a file's source."""
-    try:
-        language = get_language(lang_name)
-        parser = get_parser(lang_name)
-        tree = parser.parse(source)
-        query_src = QUERY_MAP.get(lang_name, "")
-        if not query_src:
-            return []
+    """
+    Extract all import/require strings from a file's source.
+    Uses regex for reliability across tree-sitter grammar versions.
+    """
+    import re
+    text = source.decode(errors="replace")
+    imports: list[str] = []
 
-        query = language.query(query_src)
-        captures = query.captures(tree.root_node)
-        imports: list[str] = []
-        for node, _ in captures:
-            raw = node.text.decode(errors="replace").strip("'\"` ")
-            if raw:
-                imports.append(raw)
-        return imports
-    except Exception:
-        # Tree-sitter failures are non-fatal — log and continue
-        return []
+    if lang_name in ("javascript", "typescript", "tsx"):
+        # Match: import ... from 'xxx'  or  import 'xxx'
+        for m in re.finditer(r'''import\s+.*?from\s+['"]([^'"]+)['"]''', text):
+            imports.append(m.group(1))
+        for m in re.finditer(r'''import\s+['"]([^'"]+)['"]''', text):
+            imports.append(m.group(1))
+        # Match: require('xxx')
+        for m in re.finditer(r'''require\s*\(\s*['"]([^'"]+)['"]\s*\)''', text):
+            imports.append(m.group(1))
+
+    elif lang_name == "python":
+        # import foo.bar  /  from foo.bar import ...
+        for m in re.finditer(r'^import\s+([\w.]+)', text, re.MULTILINE):
+            imports.append(m.group(1))
+        for m in re.finditer(r'^from\s+([\w.]+)\s+import', text, re.MULTILINE):
+            imports.append(m.group(1))
+
+    elif lang_name == "go":
+        for m in re.finditer(r'"([^"]+)"', text):
+            imports.append(m.group(1))
+
+    # Deduplicate while preserving order
+    seen: set[str] = set()
+    unique: list[str] = []
+    for imp in imports:
+        if imp not in seen:
+            seen.add(imp)
+            unique.append(imp)
+    return unique
 
 def _extract_functions(source: bytes, lang_name: str) -> list[str]:
     """Use Tree-sitter to extract all function names from a file's source."""
@@ -244,6 +261,42 @@ class _CycleDetector:
 # Public API
 # ---------------------------------------------------------------------------
 
+def _resolve_import(imp: str, source_file: str, all_node_ids: set[str]) -> str | None:
+    """
+    Try to resolve an import string to an actual file path present in the
+    node set. Handles:
+      - relative imports: './foo' or '../bar'
+      - alias imports:    '@/components/Button'
+      - bare module names that happen to match a node path segment
+    Returns the matched node id, or None if no match found.
+    """
+    import posixpath
+
+    source_dir = posixpath.dirname(source_file)
+
+    candidates: list[str] = []
+
+    if imp.startswith("."):
+        # Relative import: resolve relative to source file's directory
+        resolved = posixpath.normpath(posixpath.join(source_dir, imp))
+        candidates.append(resolved)
+    elif imp.startswith("@/"):
+        # Common alias for src/ root
+        candidates.append("src/" + imp[2:])
+    else:
+        # Bare import — try matching as a suffix of known node ids
+        candidates.append(imp)
+
+    # Try each candidate with common extensions
+    extensions = ["", ".ts", ".tsx", ".js", ".jsx", ".py", "/index.ts", "/index.tsx", "/index.js"]
+    for base in candidates:
+        for ext in extensions:
+            full = base + ext
+            if full in all_node_ids:
+                return full
+    return None
+
+
 def parse_repository(clone_path: str | Path) -> GraphData:
     """
     Walk the cloned repository and build a dependency graph.
@@ -251,7 +304,7 @@ def parse_repository(clone_path: str | Path) -> GraphData:
     """
     root = Path(clone_path)
     nodes: list[Node] = []
-    edges: list[Edge] = []
+    raw_edges: list[tuple[str, str]] = []      # (source_file, raw_import)
     skipped: list[str] = []
 
     # Adjacency list for cycle detection (only resolved local edges)
@@ -287,10 +340,19 @@ def parse_repository(clone_path: str | Path) -> GraphData:
 
         imports = _extract_imports(source, lang)
         for imp in imports:
-            edges.append(Edge(source=rel_path, target=imp))
-            # Only track local (relative) imports for cycle detection
-            if imp.startswith("."):
-                adj[rel_path].append(imp)
+            raw_edges.append((rel_path, imp))
+
+    # Build set of known node ids for resolution
+    node_ids = {n.id for n in nodes}
+
+    # Resolve raw imports to actual file paths
+    edges: list[Edge] = []
+    for src, raw_imp in raw_edges:
+        resolved = _resolve_import(raw_imp, src, node_ids)
+        if resolved and resolved != src:    # skip self-imports
+            edges.append(Edge(source=src, target=resolved))
+            if raw_imp.startswith("."):
+                adj.setdefault(src, []).append(resolved)
 
     # Cycle detection
     cycles = _CycleDetector(adj).run()
