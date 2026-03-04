@@ -1,24 +1,41 @@
-const BASE_URL = '/api/v1'; // Proxy or exact backend URL should go here
+const BASE_URL = '/api/v1';
+const TIMEOUT_MS = 30_000; // 30 seconds for AI calls
+
+function fetchWithTimeout(url: string, options: RequestInit = {}): Promise<Response> {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+    return fetch(url, { ...options, signal: controller.signal }).finally(() => clearTimeout(timer));
+}
 
 export const apiClient = {
     get: async (endpoint: string) => {
-        const res = await fetch(`${BASE_URL}${endpoint}`);
-        if (!res.ok) throw new Error(`API GET failed: ${endpoint}`);
+        let res: Response;
+        try {
+            res = await fetchWithTimeout(`${BASE_URL}${endpoint}`);
+        } catch (err: any) {
+            if (err.name === 'AbortError') throw new Error(`Request timed out: ${endpoint}`);
+            throw new Error(`Network error: ${err.message}`);
+        }
+        if (!res.ok) throw new Error(`API error ${res.status}: ${endpoint}`);
         return res.json();
     },
     post: async (endpoint: string, body?: any) => {
-        const res = await fetch(`${BASE_URL}${endpoint}`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: body ? JSON.stringify(body) : undefined
-        });
-        if (!res.ok) throw new Error(`API POST failed: ${endpoint}`);
-
-        // For ingest, we might need text stream instead of json, but we'll stick to json for simplicity unless specified
-        const contentType = res.headers.get("content-type");
-        if (contentType && contentType.includes("application/json")) {
+        let res: Response;
+        try {
+            res = await fetchWithTimeout(`${BASE_URL}${endpoint}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: body ? JSON.stringify(body) : undefined,
+            });
+        } catch (err: any) {
+            if (err.name === 'AbortError') throw new Error(`Request timed out: ${endpoint}`);
+            throw new Error(`Network error: ${err.message}`);
+        }
+        if (!res.ok) throw new Error(`API error ${res.status}: ${endpoint}`);
+        const contentType = res.headers.get('content-type');
+        if (contentType && contentType.includes('application/json')) {
             return res.json();
         }
         return res.text();
-    }
+    },
 };

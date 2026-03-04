@@ -6,6 +6,8 @@ import { loadSlim } from 'tsparticles-slim';
 import type { Engine } from 'tsparticles-engine';
 import { useCallback } from 'react';
 
+import { FeatureExplorerScene } from './scenes/FeatureExplorerScene';
+
 function App() {
   const { mode } = useAppStore(state => state);
 
@@ -13,7 +15,7 @@ function App() {
     await loadSlim(engine);
   }, []);
 
-  const showParticles = mode === 'landing' || mode === 'ingesting';
+  const showParticles = mode === 'landing' || mode === 'ingesting' || mode === 'feature-explorer';
 
   return (
     <div className="w-screen h-screen bg-background relative overflow-hidden flex items-center justify-center">
@@ -35,9 +37,11 @@ function App() {
             },
             detectRetina: true,
           }}
-          className="absolute inset-0 z-0"
+          className="absolute inset-0 z-0 pointer-events-none"
         />
       )}
+
+      {mode === 'feature-explorer' && <FeatureExplorerScene />}
 
       <CockpitScene />
 
