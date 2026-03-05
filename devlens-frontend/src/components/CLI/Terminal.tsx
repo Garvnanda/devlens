@@ -169,27 +169,29 @@ export const Terminal = () => {
     };
 
     const clearInput = (term: XTerminal, _currentInput: string) => {
-        // Move cursor to start of input (after '$ '), erase to end of line
         term.write('\r$ \x1b[K');
     };
 
     const isCenter = mode === 'landing' || mode === 'ingesting';
+    const isFocus = mode === 'focus';
+    const isFeatureExplorer = mode === 'feature-explorer';
+
+    const layout = isCenter
+        ? { width: '80vw', height: '80vh', left: '10vw', bottom: '10vh', top: '10vh', borderRadius: '16px', opacity: 1, scale: 1, pointerEvents: 'auto' as any }
+        : isFeatureExplorer
+            ? { width: '80vw', height: '80vh', left: '10vw', bottom: '10vh', top: '10vh', borderRadius: '24px', opacity: 0, scale: 0, pointerEvents: 'none' as any }
+            : isFocus
+                ? { width: '100vw', height: '120px', left: '0px', bottom: '0px', top: 'auto', borderRadius: '0px', opacity: 1, scale: 1, pointerEvents: 'auto' as any }
+                : { width: '400px', height: '300px', left: '24px', bottom: '24px', top: 'auto', borderRadius: '16px', opacity: 1, scale: 1, pointerEvents: 'auto' as any };
 
     return (
         <motion.div
             initial={false}
-            animate={{
-                width: isCenter ? '80vw' : '400px',
-                height: isCenter ? '80vh' : '300px',
-                left: isCenter ? '10vw' : '24px',
-                bottom: isCenter ? '10vh' : '24px',
-                top: isCenter ? '10vh' : 'auto',
-                borderRadius: '16px'
-            }}
+            animate={layout}
             transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
             className="absolute z-[100] bg-background/80 backdrop-blur-xl border border-white/20 shadow-2xl overflow-hidden flex flex-col"
         >
-            <div className="flex-1 w-full h-full p-6 text-text" ref={terminalRef} />
+            <div className="flex-1 w-full h-full p-4 text-text" ref={terminalRef} />
         </motion.div>
     );
 };

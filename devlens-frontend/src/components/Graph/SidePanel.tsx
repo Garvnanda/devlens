@@ -2,9 +2,10 @@ import { useAppStore } from '../../store/useAppStore';
 import { motion, AnimatePresence } from 'framer-motion';
 
 export const SidePanel = () => {
-    const { selectedFile, graphData, setSelectedFile, setBlastTarget } = useAppStore();
+    const { selectedFile, graphData, mode, setSelectedFile, setBlastTarget } = useAppStore();
 
-    if (!selectedFile || !graphData) return null;
+    // In focus mode, CodeViewer occupies right-0 — hide SidePanel to avoid overlap
+    if (!selectedFile || !graphData || mode === 'focus') return null;
 
     // Find connections
     const connections = graphData.links.filter((l: any) =>

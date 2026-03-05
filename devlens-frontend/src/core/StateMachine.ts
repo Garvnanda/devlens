@@ -2,11 +2,12 @@ import { useAppStore } from '../store/useAppStore';
 import type { AppMode } from '../store/useAppStore';
 
 const ALLOWED_TRANSITIONS: Record<AppMode, AppMode[]> = {
-    landing: ["ingesting", "cockpit"],
-    ingesting: ["cockpit", "landing"],
-    cockpit: ["focus", "architect", "landing"],
-    architect: ["cockpit"],
-    focus: ["cockpit"]
+    landing: ["ingesting", "cockpit", "feature-explorer"],
+    ingesting: ["feature-explorer", "cockpit", "landing"],
+    "feature-explorer": ["cockpit", "landing", "ingesting"],
+    cockpit: ["focus", "architect", "landing", "feature-explorer"],
+    architect: ["cockpit", "feature-explorer"],
+    focus: ["cockpit", "feature-explorer"]
 };
 
 export const StateMachine = {

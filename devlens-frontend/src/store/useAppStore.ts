@@ -3,6 +3,7 @@ import { create } from 'zustand';
 export type AppMode =
     | "landing"
     | "ingesting"
+    | "feature-explorer"
     | "cockpit"
     | "focus"
     | "architect";
@@ -14,6 +15,14 @@ export interface AppStore {
     selectedFile: string | null;
     blastTarget: string | null;
     cliHistory: string[];
+    // Phase 3
+    focusFileContent: string | null;
+    intentData: { intent_summary: string; commits_analyzed: number } | null;
+    intentLoading: boolean;
+    intentError: string | null;
+    explainData: { explanation: string; jargon_terms: { term: string; technical_definition: string; student_analogy: string }[] } | null;
+    explainLoading: boolean;
+    explainError: string | null;
     missionState: {
         active: boolean;
         issueNumber: number | null;
@@ -30,15 +39,29 @@ export interface AppStore {
     setSelectedFile: (file: string | null) => void;
     setBlastTarget: (target: string | null) => void;
     addCliHistory: (entry: string) => void;
+    setFocusFileContent: (content: string | null) => void;
+    setIntentData: (data: AppStore['intentData']) => void;
+    setIntentLoading: (loading: boolean) => void;
+    setIntentError: (error: string | null) => void;
+    setExplainData: (data: AppStore['explainData']) => void;
+    setExplainLoading: (loading: boolean) => void;
+    setExplainError: (error: string | null) => void;
 }
 
 export const useAppStore = create<AppStore>((set) => ({
-    mode: "landing",
+    mode: "feature-explorer",
     repoUrl: null,
     graphData: null,
     selectedFile: null,
     blastTarget: null,
     cliHistory: [],
+    focusFileContent: null,
+    intentData: null,
+    intentLoading: false,
+    intentError: null,
+    explainData: null,
+    explainLoading: false,
+    explainError: null,
     missionState: {
         active: false,
         issueNumber: null,
@@ -55,4 +78,11 @@ export const useAppStore = create<AppStore>((set) => ({
     setSelectedFile: (selectedFile) => set({ selectedFile }),
     setBlastTarget: (blastTarget) => set({ blastTarget }),
     addCliHistory: (entry) => set((state) => ({ cliHistory: [...state.cliHistory, entry] })),
+    setFocusFileContent: (focusFileContent) => set({ focusFileContent }),
+    setIntentData: (intentData) => set({ intentData }),
+    setIntentLoading: (intentLoading) => set({ intentLoading }),
+    setIntentError: (intentError) => set({ intentError }),
+    setExplainData: (explainData) => set({ explainData }),
+    setExplainLoading: (explainLoading) => set({ explainLoading }),
+    setExplainError: (explainError) => set({ explainError }),
 }));

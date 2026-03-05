@@ -3,6 +3,46 @@ import { useAppStore } from '../../store/useAppStore';
 import { StateMachine } from '../StateMachine';
 import { apiClient } from '../apiClient';
 
+/** Helper: fuzzy-match a file query against graph nodes */
+function findNode(query: string, writeOutput: (t: string, c?: string) => void): any | null {
+    const store = useAppStore.getState();
+    if (!store.graphData?.nodes?.length) {
+        writeOutput('No graph data. Run ingest and map first.', '#EF4444');
+        return null;
+    }
+    const q = query.toLowerCase();
+    const allNodes = store.graphData.nodes;
+    let match = allNodes.find((n: any) => n.id === q);
+    if (!match) {
+        const matches = allNodes.filter((n: any) => n.id.toLowerCase().includes(q));
+        if (matches.length === 1) {
+            match = matches[0];
+        } else if (matches.length > 1) {
+            writeOutput(`Multiple matches for '${query}':`);
+            matches.slice(0, 10).forEach((m: any) => writeOutput(`  ${m.id}`));
+            if (matches.length > 10) writeOutput(`  ... and ${matches.length - 10} more`);
+            writeOutput('Specify a more precise name.');
+            return null;
+        }
+    }
+    if (!match) {
+        writeOutput(`No node matching '${query}' found.`, '#EF4444');
+        return null;
+    }
+    return match;
+}
+
+/** Extract owner/repo from stored URL */
+function getOwnerRepo(): { owner: string; repo: string } | null {
+    const url = useAppStore.getState().repoUrl;
+    if (!url) return null;
+    const m = url.match(/github\.com\/([^/]+)\/([^/]+)/);
+    if (!m) return null;
+    let repo = m[2];
+    if (repo.endsWith('.git')) repo = repo.slice(0, -4);
+    return { owner: m[1], repo };
+}
+
 export const initCommands = () => {
     registerCommand({
         name: 'help',
@@ -12,7 +52,11 @@ export const initCommands = () => {
             writeOutput('  help           - Show this help message');
             writeOutput('  ingest <url>   - Ingest a GitHub repository');
             writeOutput('  map            - View the molecular dependency graph');
+            writeOutput('  home           - Return to the Feature Explorer map');
             writeOutput('  blast <file>   - Trigger blast animation on a file node');
+            writeOutput('  focus <file>   - Open code viewer for a file');
+            writeOutput('  intent <file>  - Show architectural intent from commits');
+            writeOutput('  explain <file> - Jargon buster: simplify code concepts');
             writeOutput('  clear          - Clear terminal output');
         }
     });
@@ -22,6 +66,30 @@ export const initCommands = () => {
         description: 'Clear terminal output',
         execute: ({ writeOutput }) => {
             writeOutput('\x1b[2J\x1b[3J\x1b[H');
+        }
+    });
+
+    registerCommand({
+        name: 'home',
+        description: 'Return to the Feature Explorer map',
+        execute: async ({ writeOutput }) => {
+            const store = useAppStore.getState();
+            if (store.mode === 'feature-explorer') {
+                writeOutput('Already on the Feature Explorer page.', '#EF4444');
+                return;
+            }
+            if (store.mode === 'ingesting') {
+                writeOutput('Cannot navigate while ingesting.', '#EF4444');
+                return;
+            }
+            writeOutput('Returning to Feature Explorer map...');
+
+            // Clean up selections
+            store.setSelectedFile(null);
+            store.setBlastTarget(null);
+            store.setFocusFileContent(null);
+
+            StateMachine.transition('feature-explorer');
         }
     });
 
@@ -36,18 +104,13 @@ export const initCommands = () => {
             }
 
             try {
-                // Determine owner/repo from URL
-                const url = store.repoUrl;
-                const match = url.match(/github\.com\/([^/]+)\/([^/]+)/);
-                if (!match) throw new Error('Invalid stored github URL.');
-                const owner = match[1];
-                const repo = match[2];
+                const ids = getOwnerRepo();
+                if (!ids) throw new Error('Invalid stored github URL.');
 
                 writeOutput('Connecting to graph database...');
-                const data = await apiClient.get(`/repository/graph/${owner}/${repo}`);
+                const data = await apiClient.get(`/repository/graph/${ids.owner}/${ids.repo}`);
 
                 if (data && data.nodes) {
-                    // Transform edges to links for ForceGraph3D
                     const links = (data.edges || []).map((e: any) => ({
                         source: e.source,
                         target: e.target,
@@ -74,7 +137,6 @@ export const initCommands = () => {
                 throw new Error('Usage: ingest <url>');
             }
 
-            // Remove angle brackets if user copy-pasted them
             const url = args[0].replace(/^<|>$/g, '').trim();
             const store = useAppStore.getState();
 
@@ -109,8 +171,8 @@ export const initCommands = () => {
                         }
                     }
 
-                    writeOutput("Ingestion complete. Use 'map' command to view graph.");
-                    StateMachine.transition('landing'); // Return to landing so user can type map
+                    writeOutput("Ingestion complete. Use 'map' to view dependency graph.");
+                    StateMachine.transition('landing');
                 } catch (e: any) {
                     writeOutput(`Ingestion failed: ${e.message}`, '#EF4444');
                     StateMachine.transition('landing');
@@ -124,58 +186,172 @@ export const initCommands = () => {
         description: 'Trigger blast animation on a file node',
         execute: ({ args, writeOutput }) => {
             const store = useAppStore.getState();
-
-            if (!store.graphData || !store.graphData.nodes || store.graphData.nodes.length === 0) {
+            if (!store.graphData?.nodes?.length) {
                 writeOutput('No graph data. Run ingest and map first.', '#EF4444');
                 return;
             }
-
-            // If in landing/ingesting, auto-transition to cockpit if graph exists
             if (store.mode === 'landing' || store.mode === 'ingesting') {
                 StateMachine.transition('cockpit');
             }
-
             if (args.length === 0) {
                 writeOutput('Usage: blast <filename>');
-                writeOutput('Examples: blast App.tsx, blast BookReader');
                 return;
             }
 
-            const query = args.join(' ').toLowerCase();
-            const allNodes = store.graphData.nodes;
-
-            // Try exact match first
-            let match = allNodes.find((n: any) => n.id === query);
-
-            // Then try partial match (filename contains query)
-            if (!match) {
-                const matches = allNodes.filter((n: any) =>
-                    n.id.toLowerCase().includes(query)
-                );
-
-                if (matches.length === 1) {
-                    match = matches[0];
-                } else if (matches.length > 1) {
-                    writeOutput(`Multiple matches for '${query}':`);
-                    matches.slice(0, 10).forEach((m: any) => {
-                        writeOutput(`  ${m.id}`);
-                    });
-                    if (matches.length > 10) {
-                        writeOutput(`  ... and ${matches.length - 10} more`);
-                    }
-                    writeOutput('Specify a more precise name.');
-                    return;
-                }
-            }
-
-            if (!match) {
-                writeOutput(`No node matching '${query}' found.`, '#EF4444');
-                return;
-            }
+            const match = findNode(args.join(' '), writeOutput);
+            if (!match) return;
 
             writeOutput(`Initiating blast sequence for ${match.id}...`);
             store.setBlastTarget(match.id);
             store.setSelectedFile(match.id);
+        }
+    });
+
+    // ─── Phase 3 Commands ───
+
+    registerCommand({
+        name: 'focus',
+        description: 'Open code viewer for a file',
+        execute: async ({ args, writeOutput }) => {
+            if (args.length === 0) {
+                writeOutput('Usage: focus <filename>');
+                return;
+            }
+            const store = useAppStore.getState();
+            const ids = getOwnerRepo();
+            if (!ids) {
+                writeOutput('No repository ingested.', '#EF4444');
+                return;
+            }
+
+            const match = findNode(args.join(' '), writeOutput);
+            if (!match) return;
+
+            writeOutput(`Focusing on ${match.id}...`);
+            store.setSelectedFile(match.id);
+
+            // Fetch raw file content from GitHub
+            try {
+                const rawUrl = `https://raw.githubusercontent.com/${ids.owner}/${ids.repo}/main/${match.id}`;
+                const resp = await fetch(rawUrl);
+                if (!resp.ok) {
+                    // Try master branch
+                    const resp2 = await fetch(rawUrl.replace('/main/', '/master/'));
+                    if (!resp2.ok) throw new Error('Could not fetch file from GitHub.');
+                    store.setFocusFileContent(await resp2.text());
+                } else {
+                    store.setFocusFileContent(await resp.text());
+                }
+                writeOutput('Code loaded. Entering focus mode...');
+                StateMachine.transition('focus');
+            } catch (e: any) {
+                writeOutput(`Focus failed: ${e.message}`, '#EF4444');
+            }
+        }
+    });
+
+    registerCommand({
+        name: 'intent',
+        description: 'Show architectural intent from commit history',
+        execute: async ({ args, writeOutput }) => {
+            if (args.length === 0) {
+                writeOutput('Usage: intent <filename>');
+                return;
+            }
+            const ids = getOwnerRepo();
+            if (!ids) {
+                writeOutput('No repository ingested.', '#EF4444');
+                return;
+            }
+
+            const match = findNode(args.join(' '), writeOutput);
+            if (!match) return;
+
+            const store = useAppStore.getState();
+            // Clear previous + show loading panel immediately
+            store.setIntentData(null);
+            store.setIntentError(null);
+            store.setIntentLoading(true);
+            store.setSelectedFile(match.id);
+
+            writeOutput(`Analyzing architectural intent for ${match.id}...`);
+            try {
+                const data = await apiClient.post('/intent', {
+                    owner: ids.owner,
+                    repo: ids.repo,
+                    file_path: match.id,
+                });
+                store.setIntentLoading(false);
+                store.setIntentData(data);
+                writeOutput(`Intent analysis complete — ${data.commits_analyzed} commits analyzed.`);
+            } catch (e: any) {
+                store.setIntentLoading(false);
+                store.setIntentError(e.message || 'Intent analysis failed.');
+                writeOutput(`Intent failed: ${e.message}`, '#EF4444');
+            }
+        }
+    });
+
+    registerCommand({
+        name: 'explain',
+        description: 'Jargon buster: simplify code concepts',
+        execute: async ({ args, writeOutput }) => {
+            if (args.length === 0) {
+                writeOutput('Usage: explain <filename>');
+                return;
+            }
+            const store = useAppStore.getState();
+            const ids = getOwnerRepo();
+            if (!ids) {
+                writeOutput('No repository ingested.', '#EF4444');
+                return;
+            }
+
+            const match = findNode(args.join(' '), writeOutput);
+            if (!match) return;
+
+            // Clear previous + show loading panel immediately
+            store.setExplainData(null);
+            store.setExplainError(null);
+            store.setExplainLoading(true);
+            store.setSelectedFile(match.id);
+
+            writeOutput(`Fetching ${match.id} for explanation...`);
+
+            // Get file content
+            let content: string;
+            try {
+                const rawUrl = `https://raw.githubusercontent.com/${ids.owner}/${ids.repo}/main/${match.id}`;
+                const resp = await fetch(rawUrl);
+                if (!resp.ok) {
+                    const resp2 = await fetch(rawUrl.replace('/main/', '/master/'));
+                    if (!resp2.ok) throw new Error('Could not fetch file from GitHub.');
+                    content = await resp2.text();
+                } else {
+                    content = await resp.text();
+                }
+            } catch (e: any) {
+                store.setExplainLoading(false);
+                store.setExplainError(`Could not fetch file: ${e.message}`);
+                writeOutput(`Fetch failed: ${e.message}`, '#EF4444');
+                return;
+            }
+
+            writeOutput('Sending to AI for jargon analysis...');
+            try {
+                const data = await apiClient.post('/explain', {
+                    content: content.slice(0, 6000),
+                    language: store.userProfile.language === 'hinglish' ? 'Hinglish' :
+                        store.userProfile.language === 'hindi' ? 'Hindi' : 'English'
+                });
+                store.setExplainLoading(false);
+                store.setExplainData(data);
+                writeOutput('Explanation ready — panel opened.');
+            } catch (e: any) {
+                store.setExplainLoading(false);
+                store.setExplainError(e.message || 'Jargon analysis failed.');
+                writeOutput(`Explain failed: ${e.message}`, '#EF4444');
+            }
         }
     });
 };
