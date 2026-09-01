@@ -1,4 +1,4 @@
-const BASE_URL = '/api/v1';
+const BASE_URL = import.meta.env.VITE_API_URL || '/api/v1';
 const TIMEOUT_MS = 30_000; // 30 seconds for AI calls
 
 function fetchWithTimeout(url: string, options: RequestInit = {}): Promise<Response> {

@@ -16,9 +16,8 @@ tree-sitter-languages==1.10.2
 # Retry / exponential backoff
 tenacity==9.0.0
 
-# Phase 2 — Vector store & AI
+# Phase 2 — Vector store
 chromadb==0.6.3
-boto3==1.37.9          # AWS Bedrock (Titan Embeddings v2 + Claude 3.5 Sonnet)
 
 # Phase 2 — Streamlit tester (install separately in tester/ venv or use same venv)
 streamlit==1.42.2

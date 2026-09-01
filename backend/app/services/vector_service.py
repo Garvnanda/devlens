@@ -14,14 +14,16 @@ from pathlib import Path
 from pydantic import BaseModel
 
 from app.services.parser import parse_repository, Node
-from app.services.bedrock_client import embed_text
+from app.services.bedrock_client import embed_texts
 from app.storage.hybrid_storage import storage_manager, DiskStore
 from app.config import get_settings
 
 logger = logging.getLogger(__name__)
 
-# Max concurrent embedding requests to Bedrock (avoid 429 rate limit bursts)
-BEDROCK_SEMAPHORE = asyncio.Semaphore(50)
+# OpenRouter's free embedding endpoint is rate-limited, so batch hard and
+# keep concurrency low.
+EMBED_BATCH = 50                       # chunks per /embeddings request
+EMBED_SEMAPHORE = asyncio.Semaphore(2) # concurrent embedding requests
 
 # Chunk size limits (characters)
 MAX_CHUNK_CHARS = 6000   # ~1500 tokens, well within Titan's 8k limit
@@ -184,14 +186,14 @@ def chunk_repository(clone_path: str, nodes: list[Node]) -> list[CodeChunk]:
 # Embedding (concurrent with semaphore)
 # ---------------------------------------------------------------------------
 
-async def _embed_chunk(chunk: CodeChunk) -> tuple[CodeChunk, list[float] | None]:
-    async with BEDROCK_SEMAPHORE:
+async def _embed_batch(batch: list[CodeChunk]) -> list[tuple[CodeChunk, list[float] | None]]:
+    async with EMBED_SEMAPHORE:
         try:
-            vector = await embed_text(chunk.content)
-            return chunk, vector
+            vectors = await embed_texts([c.content for c in batch])
+            return list(zip(batch, vectors))
         except Exception as exc:
-            logger.warning("Embedding failed for %s: %s", chunk.chunk_id, exc)
-            return chunk, None
+            logger.warning("Embedding batch of %d failed: %s", len(batch), exc)
+            return [(c, None) for c in batch]
 
 
 # ---------------------------------------------------------------------------
@@ -270,8 +272,10 @@ async def vectorize_repository(owner: str, repo: str) -> VectorizeResponse:
             status="no_chunks",
         )
 
-    # Step 2: Embed concurrently (semaphore-limited)
-    results = await asyncio.gather(*[_embed_chunk(c) for c in chunks])
+    # Step 2: Embed in rate-limit-friendly batches
+    batches = [chunks[i : i + EMBED_BATCH] for i in range(0, len(chunks), EMBED_BATCH)]
+    nested = await asyncio.gather(*[_embed_batch(b) for b in batches])
+    results = [pair for sub in nested for pair in sub]
 
     embedded: list[CodeChunk] = []
     vectors: list[list[float]] = []
