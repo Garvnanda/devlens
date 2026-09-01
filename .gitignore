@@ -134,6 +134,9 @@ celerybeat.pid
 # SageMath parsed files
 *.sage.py
 
+# ChromaDB local persistence (regenerated at runtime)
+backend/chroma_db/
+
 # Environments
 .env
 .envrc
