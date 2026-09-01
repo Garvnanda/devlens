@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 
 OPENROUTER_BASE = "https://openrouter.ai/api/v1"
 EMBED_MODEL = "nvidia/nemotron-3-embed-1b:free"
-CHAT_MODEL = "anthropic/claude-3.7-sonnet"
+CHAT_MODEL = "minimax/minimax-m3:free"
 
 
 def _headers() -> dict[str, str]:
