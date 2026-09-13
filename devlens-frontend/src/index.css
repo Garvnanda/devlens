@@ -8,5 +8,154 @@ body {
   background-color: theme('colors.background');
   color: theme('colors.text');
   overflow: hidden;
-  font-family: ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
+  font-family: theme('fontFamily.sans');
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ── Section colour: set --section on a container, children pick it up ── */
+.sec-text { color: var(--section); }
+.sec-bg { background-color: var(--section); }
+.sec-soft { background-color: color-mix(in srgb, var(--section) 14%, transparent); }
+.sec-border { border-color: color-mix(in srgb, var(--section) 45%, transparent); }
+.sec-glow { box-shadow: 0 0 0 1px color-mix(in srgb, var(--section) 35%, transparent), 0 8px 30px -6px color-mix(in srgb, var(--section) 60%, transparent); }
+.sec-heading {
+  background-image: linear-gradient(100deg, #fff 35%, color-mix(in srgb, var(--section) 80%, #fff));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* ── Onboarding (ported from DEEPSIGHT's walkthrough) ── */
+
+.grid-field {
+  background-image:
+    linear-gradient(to right, rgba(255, 255, 255, 0.05) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.05) 1px, transparent 1px);
+  background-size: 32px 32px;
+  background-position: -1px -1px;
+  mask-image: radial-gradient(ellipse at center, black 30%, transparent 80%);
+}
+
+.label-micro {
+  font-family: theme('fontFamily.mono');
+  font-size: 10px;
+  line-height: 1.1;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.45);
+}
+
+.tick-rule {
+  height: 6px;
+  background-image: linear-gradient(to right, rgba(255, 255, 255, 0.12) 1px, transparent 1px);
+  background-size: 8px 100%;
+}
+
+.panel-marks {
+  position: relative;
+}
+.panel-marks::before,
+.panel-marks::after {
+  content: '';
+  position: absolute;
+  width: 9px;
+  height: 9px;
+  border-color: var(--section, rgba(255, 255, 255, 0.5));
+  opacity: 0.8;
+  pointer-events: none;
+}
+.panel-marks::before {
+  top: -1px;
+  left: -1px;
+  border-top: 1px solid;
+  border-left: 1px solid;
+}
+.panel-marks::after {
+  bottom: -1px;
+  right: -1px;
+  border-bottom: 1px solid;
+  border-right: 1px solid;
+}
+
+.ob-carousel {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 20px;
+  padding: 16px;
+  background: rgba(255, 255, 255, 0.02);
+}
+.ob-carousel-item {
+  position: relative;
+  display: flex;
+  flex-shrink: 0;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+  min-height: 190px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.04);
+  padding: 20px;
+  overflow: hidden;
+  cursor: grab;
+}
+.ob-carousel-item:active {
+  cursor: grabbing;
+}
+.ob-carousel-icon {
+  display: flex;
+  height: 34px;
+  width: 34px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: var(--item, #fff);
+  color: #fff;
+  box-shadow: 0 0 18px -2px var(--item, transparent);
+}
+
+.ob-glow-card {
+  --edge-proximity: 0;
+  --cursor-angle: 45deg;
+  position: relative;
+  isolation: isolate;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.025);
+}
+.ob-edge-light {
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  pointer-events: none;
+  z-index: 0;
+  box-shadow: inset 0 0 0 1px var(--section, #fff), 0 0 28px 2px color-mix(in srgb, var(--section, #fff) 35%, transparent);
+  mask-image: conic-gradient(from var(--cursor-angle) at center, black 2.5%, transparent 12%, transparent 88%, black 97.5%);
+  opacity: calc((var(--edge-proximity) - 28) / 72);
+  transition: opacity 0.25s ease-out;
+}
+.ob-glow-card:not(:hover) > .ob-edge-light {
+  opacity: 0;
+  transition: opacity 0.75s ease-in-out;
+}
+
+/* xterm's viewport falls back to the OS's default scrollbar otherwise —
+   jarring white bar against this app's black/glass theme. */
+.xterm-viewport::-webkit-scrollbar {
+  width: 8px;
+}
+.xterm-viewport::-webkit-scrollbar-track {
+  background: transparent;
+}
+.xterm-viewport::-webkit-scrollbar-thumb {
+  background-color: rgba(6, 182, 212, 0.25);
+  border-radius: 4px;
+}
+.xterm-viewport::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(6, 182, 212, 0.45);
+}
+.xterm-viewport {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(6, 182, 212, 0.25) transparent;
 }

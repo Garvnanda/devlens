@@ -56,15 +56,20 @@ query GetRepositoryHistory($owner: String!, $repo: String!, $prCount: Int!) {
     wait=wait_exponential(multiplier=1, min=2, max=10),
     reraise=True,
 )
-async def fetch_repository_history(owner: str, repo: str, limit: int = 50) -> List[Dict[str, Any]]:
+async def fetch_repository_history(
+    owner: str, repo: str, limit: int = 50, token: str | None = None
+) -> List[Dict[str, Any]]:
     """
     Fetches the institutional memory for a repository using a single GraphQL shot.
     Returns a list of parsed PRs with issues and changed files mapping.
+
+    `token`: per-user GitHub OAuth token (Phase 9). Falls back to the app-wide
+    PAT when not provided, so every existing anonymous caller is unaffected.
     """
     settings = get_settings()
-    
+
     headers = {
-        "Authorization": f"Bearer {settings.github_pat}",
+        "Authorization": f"Bearer {token or settings.github_pat}",
         "Content-Type": "application/json",
         "User-Agent": "DevLens-GraphQL-Client"
     }
@@ -129,3 +134,76 @@ async def fetch_repository_history(owner: str, repo: str, limit: int = 50) -> Li
         # Reverse to show newest first
         formatted_history.reverse()
         return formatted_history
+
+
+# ── Phase 9: Skill Fingerprint — authenticated user's own repos ──────────
+
+USER_REPOS_QUERY = """
+query GetUserRepos {
+  viewer {
+    repositories(first: 100, ownerAffiliations: OWNER, orderBy: {field: PUSHED_AT, direction: DESC}) {
+      nodes {
+        name
+        stargazerCount
+        pushedAt
+        primaryLanguage { name }
+        languages(first: 10) {
+          edges {
+            size
+            node { name }
+          }
+        }
+      }
+    }
+  }
+}
+"""
+
+
+@retry(
+    stop=stop_after_attempt(3),
+    wait=wait_exponential(multiplier=1, min=2, max=10),
+    reraise=True,
+)
+async def fetch_user_repos(token: str) -> List[Dict[str, Any]]:
+    """
+    Fetch the authenticated user's own repositories (name, stars, pushedAt,
+    per-language byte counts) for Phase 9's Skill Fingerprint computation.
+    Always uses the user's own OAuth token — never falls back to the app PAT.
+    """
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Content-Type": "application/json",
+        "User-Agent": "DevLens-GraphQL-Client",
+    }
+
+    async with httpx.AsyncClient(timeout=20.0) as client:
+        response = await client.post(
+            "https://api.github.com/graphql",
+            headers=headers,
+            json={"query": USER_REPOS_QUERY, "variables": {}},
+        )
+        response.raise_for_status()
+        data = response.json()
+
+        if "errors" in data:
+            logger.error(f"GraphQL errors: {data['errors']}")
+            raise ValueError(f"GitHub GraphQL returned errors: {data['errors'][0].get('message')}")
+
+        repos = data.get("data", {}).get("viewer", {}).get("repositories", {}).get("nodes", [])
+
+        formatted = []
+        for repo in repos:
+            if not repo:
+                continue
+            languages = []
+            for edge in repo.get("languages", {}).get("edges", []) or []:
+                if edge and edge.get("node"):
+                    languages.append({"name": edge["node"]["name"], "size": edge.get("size", 0)})
+            formatted.append({
+                "name": repo.get("name"),
+                "stars": repo.get("stargazerCount", 0),
+                "pushed_at": repo.get("pushedAt"),
+                "languages": languages,
+            })
+        return formatted

@@ -1,52 +1,39 @@
 import { Terminal } from './components/CLI/Terminal';
+import { ClickSpark } from './components/ClickSpark';
+import { AuthModal } from './components/Modal/AuthModal';
+import { OnboardingModal } from './components/Modal/OnboardingModal';
+import { DotField } from './components/Onboarding/DotField';
 import { CockpitScene } from './scenes/CockpitScene';
+import { OnboardingScene } from './scenes/OnboardingScene';
 import { useAppStore } from './store/useAppStore';
-import Particles from 'react-tsparticles';
-import { loadSlim } from 'tsparticles-slim';
-import type { Engine } from 'tsparticles-engine';
-import { useCallback } from 'react';
-
-import { FeatureExplorerScene } from './scenes/FeatureExplorerScene';
 
 function App() {
-  const { mode } = useAppStore(state => state);
-
-  const particlesInit = useCallback(async (engine: Engine) => {
-    await loadSlim(engine);
-  }, []);
-
-  const showParticles = mode === 'landing' || mode === 'ingesting' || mode === 'feature-explorer';
+  const mode = useAppStore((state) => state.mode);
+  const showTerminalBackdrop = mode === 'landing' || mode === 'ingesting';
 
   return (
     <div className="w-screen h-screen bg-background relative overflow-hidden flex items-center justify-center">
-      {showParticles && (
-        <Particles
-          id="tsparticles"
-          init={particlesInit}
-          options={{
-            background: { color: { value: "transparent" } },
-            fpsLimit: 60,
-            particles: {
-              color: { value: "#ffffff" },
-              links: { enable: false },
-              move: { enable: true, speed: 0.5, direction: "none", random: true, straight: false, outModes: "out" },
-              number: { value: 100, density: { enable: true, area: 800 } },
-              opacity: { value: { min: 0.1, max: 0.8 }, animation: { enable: true, speed: 1, sync: false } },
-              size: { value: { min: 1, max: 3 } },
-              shape: { type: "circle" },
-            },
-            detectRetina: true,
-          }}
-          className="absolute inset-0 z-0 pointer-events-none"
-        />
+      {showTerminalBackdrop && (
+        <>
+          <div className="pointer-events-none absolute inset-0 z-0 grid-field" aria-hidden />
+          <div className="pointer-events-none absolute inset-0 z-0 opacity-60" aria-hidden>
+            <DotField dotSpacing={26} dotRadius={1.1} />
+          </div>
+        </>
       )}
 
-      {mode === 'feature-explorer' && <FeatureExplorerScene />}
+      {/* No exit animation: a fading overlay would swallow the first clicks/keys meant for the terminal. */}
+      {mode === 'feature-explorer' && <OnboardingScene />}
 
       <CockpitScene />
 
+      <AuthModal />
+      <OnboardingModal />
+
       {/* Primary Interaction Layer (Z-Index 100) */}
       <Terminal />
+
+      <ClickSpark />
     </div>
   );
 }

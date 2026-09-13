@@ -8,7 +8,12 @@ Handles three flows:
 """
 
 import logging
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy.orm import Session
+
+from app.dependencies import get_current_user_optional
+from app.storage.db import get_db
+from app.storage.models import User
 from pydantic import BaseModel
 
 from app.services.architect_agent import (
@@ -56,7 +61,11 @@ class ChatResponse(BaseModel):
     response_model=ChatResponse,
     summary="DevLens Architect — Agentic Contribution Engine",
 )
-async def chatbot(request: ChatRequest) -> ChatResponse:
+async def chatbot(
+    request: ChatRequest,
+    user: User | None = Depends(get_current_user_optional),
+    db: Session = Depends(get_db),
+) -> ChatResponse:
     """
     Main chatbot endpoint. Routes to three flows:
 
@@ -80,6 +89,16 @@ async def chatbot(request: ChatRequest) -> ChatResponse:
                 issue_number=request.issue_number,
                 user_profile=request.user_profile,
             )
+            if user:  # Phase 14 memory: durable record of the mission (live state stays in _sessions)
+                from app.services.memory_service import record_activity
+                try:
+                    record_activity(
+                        db, user.github_id, request.owner, request.repo,
+                        status="attempted", issue_number=request.issue_number,
+                        title=result.get("issue_title"), mission_mode=result.get("mode"),
+                    )
+                except Exception:
+                    logger.exception("Failed to record mission activity")
             return ChatResponse(
                 reply=result["reply"],
                 mission_id=result["mission_id"],

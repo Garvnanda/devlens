@@ -32,27 +32,53 @@ export const Terminal = () => {
         const fitAddon = new FitAddon();
         term.loadAddon(fitAddon);
 
-        term.open(terminalRef.current);
-        fitAddon.fit();
-
         xtermRef.current = term;
         fitAddonRef.current = fitAddon;
 
-        term.writeln('DevLens OS [Version 1.0.0]');
-        term.writeln('(c) DevLens Corporation. All rights reserved.\r\n');
-        term.writeln('\x1b[36m── Quick Start ──────────────────────────────────────\x1b[0m');
-        term.writeln('');
-        term.writeln('  1. \x1b[1mingest <github-url>\x1b[0m   Clone & analyze a repo');
-        term.writeln('     \x1b[2mExample: ingest https://github.com/shadcn/ui\x1b[0m');
-        term.writeln('  2. \x1b[1mmap\x1b[0m                    View the dependency graph');
-        term.writeln('  3. \x1b[1mblast <file>\x1b[0m           Highlight a node & its connections');
-        term.writeln('  4. \x1b[1mfocus <file>\x1b[0m           Open the code viewer');
-        term.writeln('  5. \x1b[1mintent <file>\x1b[0m          See why the file exists (AI)');
-        term.writeln('  6. \x1b[1mexplain <file>\x1b[0m         Jargon buster (AI)');
-        term.writeln('');
-        term.writeln('\x1b[2m  Type \x1b[0m\x1b[1mhelp\x1b[0m\x1b[2m to see all commands.\x1b[0m');
-        term.writeln('\x1b[36m────────────────────────────────────────────────────\x1b[0m');
-        prompt(term);
+        let opened = false;
+        let disposed = false;
+
+        const safeFit = () => {
+            const el = terminalRef.current;
+            if (!opened || disposed || !el || el.clientWidth === 0 || el.clientHeight === 0) return false;
+            try {
+                fitAddon.fit();
+                return true;
+            } catch {
+                return false;
+            }
+        };
+
+        // xterm measures cell size synchronously inside term.open(). On the first
+        // paint the animated container has no committed layout yet; opening
+        // against that zero-size frame corrupts the renderer permanently (every
+        // later write/fit throws). Open one frame later.
+        const openFrame = requestAnimationFrame(() => {
+            const el = terminalRef.current;
+            if (disposed || !el) return;
+
+            term.open(el);
+            opened = true;
+            if (!safeFit()) {
+                requestAnimationFrame(safeFit);
+            }
+
+            term.writeln('DevLens OS [Version 1.0.0]');
+            term.writeln('(c) DevLens Corporation. All rights reserved.\r\n');
+            term.writeln('\x1b[36m── Quick Start ──────────────────────────────────────\x1b[0m');
+            term.writeln('');
+            term.writeln('  1. \x1b[1mingest <github-url>\x1b[0m   Clone & analyze a repo');
+            term.writeln('     \x1b[2mExample: ingest https://github.com/shadcn/ui\x1b[0m');
+            term.writeln('  2. \x1b[1mmap\x1b[0m                    View the dependency graph');
+            term.writeln('  3. \x1b[1mblast <file>\x1b[0m           Highlight a node & its connections');
+            term.writeln('  4. \x1b[1mfocus <file>\x1b[0m           Open the code viewer');
+            term.writeln('  5. \x1b[1mintent <file>\x1b[0m          See why the file exists (AI)');
+            term.writeln('  6. \x1b[1mexplain <file>\x1b[0m         Jargon buster (AI)');
+            term.writeln('');
+            term.writeln('\x1b[2m  Type \x1b[0m\x1b[1mhelp\x1b[0m\x1b[2m to see all commands.\x1b[0m');
+            term.writeln('\x1b[36m────────────────────────────────────────────────────\x1b[0m');
+            prompt(term);
+        });
 
         term.onData((data) => {
             const state = useAppStore.getState();
@@ -162,7 +188,7 @@ export const Terminal = () => {
 
         const terminalEl = terminalRef.current;
         const resizeObserver = new ResizeObserver(() => {
-            fitAddon.fit();
+            safeFit();
         });
         resizeObserver.observe(terminalEl);
 
@@ -170,8 +196,10 @@ export const Terminal = () => {
         terminalEl.addEventListener('click', () => term.focus());
 
         return () => {
+            disposed = true;
+            cancelAnimationFrame(openFrame);
             resizeObserver.disconnect();
-            term.dispose();
+            if (opened) term.dispose();
             xtermRef.current = null;
         };
     }, []);
@@ -184,25 +212,32 @@ export const Terminal = () => {
         term.write('\r$ \x1b[K');
     };
 
+    // Leaving the walkthrough should let you type immediately, without clicking the terminal first.
+    useEffect(() => {
+        if (mode === 'feature-explorer') return;
+        const t = setTimeout(() => xtermRef.current?.focus(), 50);
+        return () => clearTimeout(t);
+    }, [mode]);
+
     const isCenter = mode === 'landing' || mode === 'ingesting';
     const isFocus = mode === 'focus';
     const isFeatureExplorer = mode === 'feature-explorer';
 
     const layout = isCenter
-        ? { width: '80vw', height: '80vh', left: '10vw', top: '10vh', borderRadius: '16px', opacity: 1, scale: 1, pointerEvents: 'auto' as any }
+        ? { width: '80vw', height: '80vh', left: '10vw', top: '10vh', borderRadius: '16px', opacity: 1, scale: 1 }
         : isFeatureExplorer
-            // Animate towards the CLIButton position (bottom-10 right-10) and shrink into a circle
-            ? { width: '4rem', height: '4rem', left: 'calc(100vw - 6.5rem)', top: 'calc(100vh - 6.5rem)', borderRadius: '50%', opacity: 0, scale: 0.5, pointerEvents: 'none' as any }
+            // Hidden behind the walkthrough at its landing size, so "Open the terminal" fades it in place
+            ? { width: '80vw', height: '80vh', left: '10vw', top: '10vh', borderRadius: '16px', opacity: 0, scale: 0.96 }
             : isFocus
-                ? { width: '100vw', height: '120px', left: '0vw', top: 'calc(100vh - 120px)', borderRadius: '0px', opacity: 1, scale: 1, pointerEvents: 'auto' as any }
-                : { width: '400px', height: '300px', left: '24px', top: 'calc(100vh - 324px)', borderRadius: '16px', opacity: 1, scale: 1, pointerEvents: 'auto' as any };
+                ? { width: '100vw', height: '120px', left: '0vw', top: 'calc(100vh - 120px)', borderRadius: '0px', opacity: 1, scale: 1 }
+                : { width: '400px', height: '300px', left: '24px', top: 'calc(100vh - 324px)', borderRadius: '16px', opacity: 1, scale: 1 };
 
     return (
         <motion.div
             initial={false}
             animate={layout}
             transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
-            className="absolute z-[100] bg-background/80 backdrop-blur-xl border border-white/20 shadow-2xl overflow-hidden flex flex-col"
+            className={`absolute z-[100] ${isFeatureExplorer ? "pointer-events-none" : "pointer-events-auto"} bg-background/80 backdrop-blur-xl border border-white/20 shadow-2xl overflow-hidden flex flex-col`}
         >
             <div className="flex-1 w-full h-full p-4 text-text" ref={terminalRef} />
         </motion.div>

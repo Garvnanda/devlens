@@ -1,0 +1,1161 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DevLens — contributor console</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link
+    href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap"
+    rel="stylesheet">
+  <style>
+    :root {
+      --bg: #FFFFFF;
+      --surface: #FFFFFF;
+      --surface-alt: #F6F5F1;
+      --border: #E3E0D7;
+      --text: #111111;
+      --text-secondary: #55534C;
+      --text-muted: #8C8878;
+      --success: #1E7A34;
+      --success-bg: #EAF3E8;
+      --warning: #9A6408;
+      --warning-bg: #FBF1DD;
+      --danger: #B92A2A;
+      --danger-bg: #FBEAEA;
+      --font-sans: 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+      --font-mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+      --section: #0F9B8E;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root:not([data-mode="light"]) {
+        --bg: #0E1013;
+        --surface: #15181C;
+        --surface-alt: #1B1F24;
+        --border: #2B2F35;
+        --text: #F1EFE9;
+        --text-secondary: #B7B4A9;
+        --text-muted: #7D7A70;
+        --success: #4CAF6B;
+        --success-bg: #17301F;
+        --warning: #E0A73C;
+        --warning-bg: #392C10;
+        --danger: #E5615F;
+        --danger-bg: #391818;
+      }
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      margin: 0;
+      background: var(--bg);
+    }
+
+    body {
+      color: var(--text);
+      font-family: var(--font-sans);
+      font-size: 14px;
+      line-height: 1.6;
+      position: relative;
+      min-height: 100vh;
+    }
+
+    canvas#dotfield-bg {
+      position: fixed;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 0;
+      pointer-events: none;
+    }
+
+    canvas#spark-canvas {
+      position: fixed;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 50;
+      pointer-events: none;
+    }
+
+    .app {
+      position: relative;
+      z-index: 1;
+      max-width: 920px;
+      margin: 0 auto;
+      padding: 28px 24px 140px;
+    }
+
+    .topbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      margin-bottom: 22px;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-weight: 600;
+      font-size: 15px;
+      margin-bottom: 10px;
+    }
+
+    .brand-mark {
+      width: 20px;
+      height: 20px;
+      border-radius: 6px;
+      background: linear-gradient(135deg, #7C3AED, #EA580C);
+      flex-shrink: 0;
+    }
+
+    .topbar h1 {
+      font-size: 19px;
+      font-weight: 600;
+      margin: 0 0 4px;
+      color: var(--section);
+    }
+
+    .topbar .repo {
+      font-family: var(--font-mono);
+      color: var(--text-secondary);
+      font-size: 13px;
+    }
+
+    .live-tag {
+      font-size: 11px;
+      color: var(--success);
+      border: 1px solid var(--success);
+      border-radius: 20px;
+      padding: 3px 10px;
+      display: inline-block;
+      margin-top: 6px;
+    }
+
+    .view {
+      display: none;
+    }
+
+    .view.active {
+      display: block;
+    }
+
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 20px;
+      margin-bottom: 16px;
+      position: relative;
+    }
+
+    .card h3 {
+      margin: 0 0 10px;
+      font-size: 14px;
+      font-weight: 600;
+    }
+
+    .card p {
+      margin: 0;
+      color: var(--text-secondary);
+    }
+
+    .glow-card {
+      --edge-proximity: 0;
+      --cursor-angle: 0deg;
+    }
+
+    .glow-card::before {
+      content: "";
+      position: absolute;
+      inset: -1px;
+      border-radius: 11px;
+      padding: 1.5px;
+      pointer-events: none;
+      z-index: 0;
+      background: conic-gradient(from var(--cursor-angle), transparent 0%, var(--glow-color, #999) 10%, transparent 24%);
+      opacity: calc(var(--edge-proximity) / 100);
+      -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+      -webkit-mask-composite: xor;
+      mask-composite: exclude;
+      transition: opacity .3s ease;
+    }
+
+    .card>* {
+      position: relative;
+      z-index: 1;
+    }
+
+    .grid3 {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+    }
+
+    .stat-box {
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 14px;
+    }
+
+    .stat-box .label {
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-bottom: 6px;
+    }
+
+    .stat-box .val {
+      font-size: 15px;
+      font-weight: 600;
+    }
+
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 12px;
+      font-weight: 500;
+      padding: 3px 9px;
+      border-radius: 20px;
+    }
+
+    .pill-good {
+      background: var(--success-bg);
+      color: var(--success);
+    }
+
+    .pill-warn {
+      background: var(--warning-bg);
+      color: var(--warning);
+    }
+
+    .pill-bad {
+      background: var(--danger-bg);
+      color: var(--danger);
+    }
+
+    .pill-neutral {
+      background: var(--surface-alt);
+      color: var(--text-secondary);
+      border: 1px solid var(--border);
+    }
+
+    .verdict {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      padding: 16px;
+      border-radius: 10px;
+      font-weight: 600;
+      font-size: 15px;
+      margin-bottom: 16px;
+    }
+
+    .verdict.good {
+      background: var(--success-bg);
+      color: var(--success);
+    }
+
+    .verdict.warn {
+      background: var(--warning-bg);
+      color: var(--warning);
+    }
+
+    form.ingest-form {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 10px;
+    }
+
+    input[type=text] {
+      flex: 1;
+      padding: 10px 12px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--surface);
+      color: var(--text);
+      font-family: var(--font-mono);
+      font-size: 13px;
+    }
+
+    .result-card {
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 14px 16px;
+      margin-bottom: 10px;
+    }
+
+    .result-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 10px;
+    }
+
+    .result-title {
+      font-weight: 600;
+      font-size: 13.5px;
+    }
+
+    .result-meta {
+      margin-top: 6px;
+      color: var(--text-muted);
+      font-size: 12px;
+    }
+
+    .result-files {
+      font-family: var(--font-mono);
+      font-size: 12px;
+      color: var(--text-secondary);
+      margin-top: 6px;
+    }
+
+    .btn {
+      border: 1px solid var(--border);
+      background: var(--surface);
+      color: var(--text);
+      border-radius: 6px;
+      padding: 7px 12px;
+      font-size: 12.5px;
+      font-weight: 500;
+      cursor: pointer;
+      font-family: var(--font-sans);
+    }
+
+    .btn-primary {
+      background: var(--section);
+      color: #fff;
+      border: none;
+    }
+
+    .btn:disabled {
+      opacity: .5;
+      cursor: not-allowed;
+    }
+
+    code,
+    .mono {
+      font-family: var(--font-mono);
+    }
+
+    pre {
+      background: var(--surface-alt);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 14px;
+      font-family: var(--font-mono);
+      font-size: 12.5px;
+      overflow-x: auto;
+      color: var(--text);
+      white-space: pre-wrap;
+    }
+
+    ol.steps {
+      margin: 0;
+      padding-left: 20px;
+    }
+
+    ol.steps li {
+      margin-bottom: 10px;
+      color: var(--text-secondary);
+    }
+
+    ol.steps li code {
+      color: var(--text);
+    }
+
+    .scene-wrap {
+      position: relative;
+      width: 100%;
+      height: 400px;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      overflow: hidden;
+      background: var(--surface);
+    }
+
+    .scene-wrap canvas {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      cursor: grab;
+    }
+
+    .scene-wrap canvas:active {
+      cursor: grabbing;
+    }
+
+    .labels-layer {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+    }
+
+    .node-3d-label {
+      position: absolute;
+      transform: translate(-50%, -50%);
+      font-family: var(--font-mono);
+      font-size: 10px;
+      color: var(--text-secondary);
+      white-space: nowrap;
+      background: color-mix(in srgb, var(--surface) 75%, transparent);
+      padding: 1px 5px;
+      border-radius: 4px;
+    }
+
+    .scene-hint {
+      font-size: 12px;
+      color: var(--text-muted);
+      margin: 8px 0 14px;
+    }
+
+    .info-panel {
+      margin-top: 10px;
+      font-size: 13px;
+      color: var(--text-secondary);
+      min-height: 20px;
+    }
+
+    .sec-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+
+    .sec-table th {
+      text-align: left;
+      font-size: 11px;
+      color: var(--text-muted);
+      padding: 6px 10px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .sec-table td {
+      padding: 10px 10px;
+      border-bottom: 1px solid var(--border);
+      vertical-align: top;
+    }
+
+    .wheel {
+      width: 220px;
+      height: 132px;
+      overflow: hidden;
+      position: relative;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: var(--surface-alt);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 2px;
+      cursor: ns-resize;
+    }
+
+    .wheel-item {
+      font-family: var(--font-mono);
+      font-size: 12px;
+      color: var(--text-muted);
+      padding: 5px 10px;
+      border-radius: 6px;
+      opacity: .5;
+      transform: scale(.9);
+      transition: all .18s ease;
+      cursor: pointer;
+      text-align: center;
+    }
+
+    .wheel-item.active {
+      opacity: 1;
+      transform: scale(1.05);
+      color: var(--section);
+      font-weight: 600;
+      background: var(--surface);
+    }
+
+    .status-msg {
+      font-size: 13px;
+      color: var(--text-secondary);
+      min-height: 18px;
+      margin-bottom: 10px;
+    }
+
+    .status-msg.error {
+      color: var(--danger);
+    }
+
+    .dock {
+      position: fixed;
+      left: 50%;
+      bottom: 18px;
+      transform: translateX(-50%);
+      display: flex;
+      align-items: flex-end;
+      gap: 10px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 8px 10px;
+      z-index: 40;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, .12);
+    }
+
+    .dock-item {
+      width: 44px;
+      height: 44px;
+      border-radius: 11px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: var(--surface-alt);
+      color: var(--text-secondary);
+      cursor: pointer;
+      position: relative;
+      flex-shrink: 0;
+      transition: transform .12s ease, background .15s ease, color .15s ease;
+    }
+
+    .dock-item.disabled {
+      opacity: .35;
+      cursor: not-allowed;
+    }
+
+    .dock-item svg {
+      width: 18px;
+      height: 18px;
+      stroke: currentColor;
+      fill: none;
+      stroke-width: 1.6;
+    }
+
+    .dock-item .tip {
+      position: absolute;
+      bottom: calc(100% + 10px);
+      left: 50%;
+      transform: translateX(-50%);
+      background: var(--text);
+      color: var(--bg);
+      font-size: 11px;
+      padding: 3px 8px;
+      border-radius: 5px;
+      white-space: nowrap;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity .12s ease;
+    }
+
+    .dock-item:hover .tip {
+      opacity: 1;
+    }
+
+    @media(max-width:640px) {
+      .grid3 {
+        grid-template-columns: 1fr;
+      }
+
+      .wheel {
+        width: 100%;
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <canvas id="dotfield-bg"></canvas>
+  <canvas id="spark-canvas"></canvas>
+
+  <div class="app">
+    <div class="topbar">
+      <div>
+        <div class="brand"><span class="brand-mark"></span><span>DevLens</span></div>
+        <h1 id="view-title">Ingest</h1>
+        <div class="repo" id="repo-label">no repo loaded</div>
+        <span class="live-tag">● live — talking to a real backend</span>
+      </div>
+    </div>
+
+    <!-- INGEST -->
+    <section class="view active" id="view-ingest">
+      <div class="card">
+        <h3>Analyze a public GitHub repo</h3>
+        <p style="margin-bottom:12px;">Python repos only in this build — the graph is built from a real AST parse of the
+          actual import statements.</p>
+        <form class="ingest-form" id="ingest-form">
+          <input type="text" id="repo-url-input" placeholder="https://github.com/owner/repo"
+            value="https://github.com/pytest-dev/iniconfig">
+          <button class="btn btn-primary" type="submit">Analyze</button>
+        </form>
+        <div class="status-msg" id="ingest-status"></div>
+      </div>
+    </section>
+
+    <!-- GATEKEEPER -->
+    <section class="view" id="view-gatekeeper">
+      <div id="gatekeeper-content">
+        <p class="status-msg">Ingest a repo first.</p>
+      </div>
+      <div class="card" style="margin-top:16px;">
+        <h3>Good first issues</h3>
+        <div id="issues-content">
+          <p class="status-msg">Ingest a repo first.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- SEARCH -->
+    <section class="view" id="view-search">
+      <form class="ingest-form" id="search-form">
+        <input type="text" id="search-input" placeholder="search files by keyword (e.g. parse, config, auth)">
+        <button class="btn btn-primary" type="submit">Search</button>
+      </form>
+      <div id="results"></div>
+    </section>
+
+    <!-- GRAPH -->
+    <section class="view" id="view-graph">
+      <p class="scene-hint">Drag to rotate. Click a sphere for its file path. Color = risk tier (from real in-degree +
+        filename heuristics).</p>
+      <div class="scene-wrap"><canvas id="graph-canvas"></canvas>
+        <div class="labels-layer" id="graph-labels"></div>
+      </div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px;">
+        <span class="pill pill-neutral">● low</span><span class="pill pill-warn">● medium</span><span
+          class="pill pill-bad">● security-flagged filename</span>
+      </div>
+      <div class="info-panel" id="graph-info">Click a node to see its file path.</div>
+    </section>
+
+    <!-- IMPACT -->
+    <section class="view" id="view-impact">
+      <div style="margin-bottom:14px;">
+        <div style="font-size:11px;color:var(--text-muted);margin-bottom:6px;">Simulate changing (top files by
+          dependents)</div>
+        <div class="wheel" id="impact-wheel"></div>
+      </div>
+      <p class="scene-hint">Drag to rotate. Bright red = the file you picked, amber = affected files.</p>
+      <div class="scene-wrap"><canvas id="impact-canvas"></canvas>
+        <div class="labels-layer" id="impact-labels"></div>
+      </div>
+      <div class="grid3" style="margin-top:14px;">
+        <div class="stat-box">
+          <div class="label">Direct impact</div>
+          <div class="val" id="imp-direct-count">–</div>
+        </div>
+        <div class="stat-box">
+          <div class="label">Indirect impact</div>
+          <div class="val" id="imp-indirect-count">–</div>
+        </div>
+        <div class="stat-box">
+          <div class="label">Total modules in repo</div>
+          <div class="val" id="imp-total">–</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- SECURITY -->
+    <section class="view" id="view-security">
+      <div id="security-content">
+        <p class="status-msg">Ingest a repo first.</p>
+      </div>
+    </section>
+
+    <!-- MISSION -->
+    <section class="view" id="view-mission">
+      <div id="mission-content">
+        <p class="status-msg">Start a mission from Gatekeeper or Search.</p>
+      </div>
+    </section>
+  </div>
+
+  <nav class="dock" id="dock"></nav>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script>
+    /* ---------- section colors & dock ---------- */
+    const SECTIONS = {
+      ingest: { color: '#7C3AED', icon: '<path d="M4 10h12M10 4v12"/>', label: 'Ingest', needsRepo: false },
+      gatekeeper: { color: '#0F9B8E', icon: '<path d="M10 2l6 2v5c0 4-3 7-6 8-3-1-6-4-6-8V4z"/>', label: 'Gatekeeper', needsRepo: true },
+      search: { color: '#2563EB', icon: '<circle cx="8.5" cy="8.5" r="5"/><line x1="12.5" y1="12.5" x2="17" y2="17"/>', label: 'Search', needsRepo: true },
+      graph: { color: '#EA580C', icon: '<circle cx="5" cy="6" r="2"/><circle cx="15" cy="6" r="2"/><circle cx="10" cy="15" r="2"/><line x1="6.5" y1="7" x2="9" y2="13.5"/><line x1="13.5" y1="7" x2="11" y2="13.5"/><line x1="7" y1="6" x2="13" y2="6"/>', label: 'Repo graph', needsRepo: true },
+      impact: { color: '#E11D48', icon: '<circle cx="10" cy="10" r="7"/><circle cx="10" cy="10" r="4"/><circle cx="10" cy="10" r="1"/>', label: 'Impact', needsRepo: true },
+      security: { color: '#D97706', icon: '<path d="M10 2l6 2v5c0 4-3 7-6 8-3-1-6-4-6-8V4z"/><rect x="7.5" y="9" width="5" height="4" rx="0.6"/>', label: 'Security', needsRepo: true },
+      mission: { color: '#DB2777', icon: '<line x1="4" y1="5" x2="16" y2="5"/><line x1="4" y1="10" x2="16" y2="10"/><line x1="4" y1="15" x2="12" y2="15"/>', label: 'Mission plan', needsRepo: true }
+    };
+    const dock = document.getElementById('dock');
+    Object.keys(SECTIONS).forEach(key => {
+      const s = SECTIONS[key];
+      const el = document.createElement('div');
+      el.className = 'dock-item' + (s.needsRepo ? ' disabled' : '');
+      el.dataset.view = key;
+      if (s.needsRepo) el.dataset.needsRepo = '1';
+      el.innerHTML = `<svg viewBox="0 0 20 20">${s.icon}</svg><span class="tip">${s.label}</span>`;
+      el.onclick = () => { if (el.classList.contains('disabled')) return; showView(key); };
+      dock.appendChild(el);
+    });
+    dock.addEventListener('mousemove', e => {
+      [...dock.children].forEach(item => {
+        const r = item.getBoundingClientRect();
+        const dist = Math.abs(e.clientX - (r.left + r.width / 2));
+        const scale = dist < 110 ? 1 + (1 - dist / 110) * 0.55 : 1;
+        item.style.transform = `scale(${scale.toFixed(2)})`;
+      });
+    });
+    dock.addEventListener('mouseleave', () => { [...dock.children].forEach(i => i.style.transform = 'scale(1)'); });
+
+    let currentSectionColor = '#7C3AED';
+    function showView(id) {
+      document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+      document.getElementById('view-' + id).classList.add('active');
+      document.querySelectorAll('.dock-item').forEach(item => {
+        const on = item.dataset.view === id;
+        item.style.background = on ? SECTIONS[id].color : '';
+        item.style.color = on ? '#fff' : '';
+      });
+      document.getElementById('view-title').textContent = SECTIONS[id].label;
+      document.documentElement.style.setProperty('--section', SECTIONS[id].color);
+      currentSectionColor = SECTIONS[id].color;
+      if (id === 'graph') { impactApi && impactApi.stop(); graphApi && (graphApi.start(), requestAnimationFrame(() => graphApi.resize())); }
+      else if (id === 'impact') { graphApi && graphApi.stop(); impactApi && (impactApi.start(), requestAnimationFrame(() => impactApi.resize())); }
+      else { graphApi && graphApi.stop(); impactApi && impactApi.stop(); }
+    }
+
+    /* ---------- dotfield ambient background ---------- */
+    (function () {
+      const canvas = document.getElementById('dotfield-bg');
+      const ctx = canvas.getContext('2d');
+      let dots = [], w = 0, h = 0;
+      const mouse = { x: -9999, y: -9999 };
+      function resize() {
+        w = canvas.width = window.innerWidth; h = canvas.height = window.innerHeight;
+        const spacing = 30; dots = [];
+        for (let y = spacing / 2; y < h; y += spacing) for (let x = spacing / 2; x < w; x += spacing) dots.push({ ax: x, ay: y, sx: x, sy: y });
+      }
+      window.addEventListener('resize', resize);
+      window.addEventListener('mousemove', e => { mouse.x = e.clientX; mouse.y = e.clientY; });
+      resize();
+      function tick() {
+        ctx.clearRect(0, 0, w, h);
+        const grad = ctx.createLinearGradient(0, 0, w, h);
+        grad.addColorStop(0, 'rgba(124,58,237,0.16)'); grad.addColorStop(1, 'rgba(234,88,12,0.12)');
+        ctx.fillStyle = grad;
+        const R = 140, R2 = R * R;
+        for (const d of dots) {
+          const dx = mouse.x - d.ax, dy = mouse.y - d.ay, dist2 = dx * dx + dy * dy;
+          if (dist2 < R2) {
+            const dist = Math.sqrt(dist2), t = 1 - dist / R, push = t * t * 36, angle = Math.atan2(dy, dx);
+            d.sx += (d.ax - Math.cos(angle) * push - d.sx) * 0.15; d.sy += (d.ay - Math.sin(angle) * push - d.sy) * 0.15;
+          } else { d.sx += (d.ax - d.sx) * 0.08; d.sy += (d.ay - d.sy) * 0.08; }
+          ctx.beginPath(); ctx.arc(d.sx, d.sy, 1.4, 0, Math.PI * 2); ctx.fill();
+        }
+        requestAnimationFrame(tick);
+      }
+      requestAnimationFrame(tick);
+    })();
+
+    /* ---------- click spark ---------- */
+    (function () {
+      const canvas = document.getElementById('spark-canvas'); const ctx = canvas.getContext('2d');
+      function resize() { canvas.width = window.innerWidth; canvas.height = window.innerHeight; }
+      window.addEventListener('resize', resize); resize();
+      let sparks = [];
+      document.addEventListener('click', e => {
+        if (!e.target.closest('.btn') && !e.target.closest('.dock-item') && !e.target.closest('.wheel-item')) return;
+        for (let i = 0; i < 8; i++) sparks.push({ x: e.clientX, y: e.clientY, angle: (Math.PI * 2 * i) / 8, start: performance.now() });
+      });
+      function draw(now) {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        sparks = sparks.filter(s => {
+          const elapsed = now - s.start; if (elapsed > 420) return false;
+          const p = elapsed / 420, eased = p * (2 - p), dist = eased * 24, len = 8 * (1 - eased);
+          const x1 = s.x + dist * Math.cos(s.angle), y1 = s.y + dist * Math.sin(s.angle);
+          const x2 = s.x + (dist + len) * Math.cos(s.angle), y2 = s.y + (dist + len) * Math.sin(s.angle);
+          ctx.strokeStyle = currentSectionColor; ctx.lineWidth = 2;
+          ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
+          return true;
+        });
+        requestAnimationFrame(draw);
+      }
+      requestAnimationFrame(draw);
+    })();
+
+    /* ---------- border glow ---------- */
+    function attachGlow(card, color) {
+      card.classList.add('glow-card');
+      card.style.setProperty('--glow-color', color);
+      card.addEventListener('pointermove', e => {
+        const r = card.getBoundingClientRect(); const x = e.clientX - r.left, y = e.clientY - r.top;
+        const cx = r.width / 2, cy = r.height / 2, dx = x - cx, dy = y - cy;
+        const edge = Math.min(1, Math.max(Math.abs(dx) / cx, Math.abs(dy) / cy));
+        const angle = ((Math.atan2(dy, dx) * 180 / Math.PI) + 90 + 360) % 360;
+        card.style.setProperty('--edge-proximity', (edge * 100).toFixed(1));
+        card.style.setProperty('--cursor-angle', angle.toFixed(1) + 'deg');
+      });
+      card.addEventListener('pointerleave', () => card.style.setProperty('--edge-proximity', '0'));
+    }
+
+    /* ---------- wheel picker ---------- */
+    function buildWheel(container, items, onSelect) {
+      let selectedIndex = 0;
+      function render() {
+        container.innerHTML = '';
+        items.forEach((item, i) => {
+          const el = document.createElement('div');
+          el.className = 'wheel-item' + (i === selectedIndex ? ' active' : '');
+          el.textContent = item.label;
+          el.onclick = () => { selectedIndex = i; render(); onSelect(item); };
+          container.appendChild(el);
+        });
+      }
+      container.onwheel = e => {
+        e.preventDefault();
+        selectedIndex = Math.max(0, Math.min(items.length - 1, selectedIndex + (e.deltaY > 0 ? 1 : -1)));
+        render(); onSelect(items[selectedIndex]);
+      };
+      render();
+      if (items.length) onSelect(items[0]);
+    }
+
+    /* ---------- 3D scene factory (data-driven) ---------- */
+    const TIER_COLOR = { low: 0x9CA3AF, med: 0xD97706, high: 0xE11D48 };
+
+    function createScene(canvas, labelsLayer) {
+      const scene = new THREE.Scene();
+      const camera = new THREE.PerspectiveCamera(50, 1, 0.1, 2000);
+      camera.position.set(0, 0, 260);
+      const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+      renderer.setClearColor(0x000000, 0);
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+      scene.add(new THREE.AmbientLight(0xffffff, 0.7));
+      const dirLight = new THREE.DirectionalLight(0xffffff, 0.7);
+      dirLight.position.set(60, 90, 120); scene.add(dirLight);
+      const root = new THREE.Group(); scene.add(root);
+
+      let nodeMeshes = {}, nodeLabels = {}, edgeLines = {};
+      let dragging = false, dragged = false, lastX = 0, lastY = 0, running = false, onNodeClickCb = null;
+
+      canvas.addEventListener('pointerdown', e => { dragging = true; dragged = false; lastX = e.clientX; lastY = e.clientY; canvas.setPointerCapture(e.pointerId); });
+      canvas.addEventListener('pointermove', e => {
+        if (!dragging) return;
+        const dx = e.clientX - lastX, dy = e.clientY - lastY;
+        if (Math.abs(dx) + Math.abs(dy) > 3) dragged = true;
+        root.rotation.y += dx * 0.006;
+        root.rotation.x = Math.max(-1, Math.min(1, root.rotation.x + dy * 0.006));
+        lastX = e.clientX; lastY = e.clientY;
+      });
+      canvas.addEventListener('pointerup', () => { dragging = false; });
+      canvas.addEventListener('pointercancel', () => { dragging = false; });
+      canvas.addEventListener('click', e => {
+        if (dragged) return;
+        const rect = canvas.getBoundingClientRect();
+        const ndc = new THREE.Vector2(((e.clientX - rect.left) / rect.width) * 2 - 1, -((e.clientY - rect.top) / rect.height) * 2 + 1);
+        const ray = new THREE.Raycaster(); ray.setFromCamera(ndc, camera);
+        const hits = ray.intersectObjects(Object.values(nodeMeshes));
+        if (hits.length && onNodeClickCb) onNodeClickCb(hits[0].object.userData.id);
+      });
+
+      function resize() {
+        const rect = canvas.parentElement.getBoundingClientRect();
+        if (rect.width === 0 || rect.height === 0) return;
+        renderer.setSize(rect.width, rect.height, false);
+        camera.aspect = rect.width / rect.height;
+        camera.updateProjectionMatrix();
+      }
+      window.addEventListener('resize', resize);
+
+      function updateLabels() {
+        const rect = canvas.getBoundingClientRect();
+        Object.keys(nodeMeshes).forEach(id => {
+          const v = nodeMeshes[id].position.clone().project(camera);
+          const label = nodeLabels[id];
+          const visible = v.z < 1;
+          label.style.display = visible ? 'block' : 'none';
+          if (visible) {
+            label.style.left = ((v.x * 0.5 + 0.5) * rect.width) + 'px';
+            label.style.top = ((-v.y * 0.5 + 0.5) * rect.height + 14) + 'px';
+          }
+        });
+      }
+
+      function animate() {
+        if (!running) return;
+        requestAnimationFrame(animate);
+        if (!dragging) root.rotation.y += 0.0016;
+        renderer.render(scene, camera);
+        updateLabels();
+      }
+
+      function clearGraph() {
+        Object.values(nodeMeshes).forEach(m => { root.remove(m); m.geometry.dispose(); m.material.dispose(); });
+        Object.values(edgeLines).forEach(l => { root.remove(l); l.geometry.dispose(); l.material.dispose(); });
+        Object.values(nodeLabels).forEach(el => el.remove());
+        nodeMeshes = {}; nodeLabels = {}; edgeLines = {};
+      }
+
+      function loadGraph(nodes, edges) {
+        clearGraph();
+        nodes.forEach(n => {
+          const colorHex = TIER_COLOR[n.tier] || TIER_COLOR.low;
+          const geo = new THREE.SphereGeometry(n.tier === 'high' ? 7.5 : 6, 20, 16);
+          const mat = new THREE.MeshStandardMaterial({ color: colorHex, emissive: colorHex, emissiveIntensity: 0.35, transparent: true, opacity: 1 });
+          const mesh = new THREE.Mesh(geo, mat);
+          mesh.position.set(n.x, n.y, n.z);
+          mesh.userData.id = n.id;
+          root.add(mesh);
+          nodeMeshes[n.id] = mesh;
+          const label = document.createElement('div');
+          label.className = 'node-3d-label';
+          label.textContent = n.label || n.id;
+          labelsLayer.appendChild(label);
+          nodeLabels[n.id] = label;
+        });
+        edges.forEach(e => {
+          const na = nodeMeshes[e.from], nb = nodeMeshes[e.to];
+          if (!na || !nb) return;
+          const geo = new THREE.BufferGeometry().setFromPoints([na.position.clone(), nb.position.clone()]);
+          const mat = new THREE.LineBasicMaterial({ color: 0xB9B6AA, transparent: true, opacity: 0.4 });
+          const line = new THREE.Line(geo, mat);
+          root.add(line);
+          edgeLines[e.from + '__' + e.to] = line;
+        });
+      }
+
+      return {
+        start() { if (running) return; running = true; requestAnimationFrame(animate); },
+        stop() { running = false; },
+        resize, loadGraph,
+        setNodeStyle(id, { color, opacity, emissiveIntensity }) {
+          const mesh = nodeMeshes[id]; if (!mesh) return;
+          const m = mesh.material;
+          if (color != null) { m.color.setHex(color); m.emissive.setHex(color); }
+          if (opacity != null) m.opacity = opacity;
+          if (emissiveIntensity != null) m.emissiveIntensity = emissiveIntensity;
+        },
+        setEdgeStyle(key, { color, opacity }) {
+          const line = edgeLines[key]; if (!line) return;
+          if (color != null) line.material.color.setHex(color);
+          if (opacity != null) line.material.opacity = opacity;
+        },
+        getEdgeKeys() { return Object.keys(edgeLines); },
+        onNodeClick(cb) { onNodeClickCb = cb; }
+      };
+    }
+
+    let graphApi = createScene(document.getElementById('graph-canvas'), document.getElementById('graph-labels'));
+    let impactApi = createScene(document.getElementById('impact-canvas'), document.getElementById('impact-labels'));
+    graphApi.onNodeClick(id => { document.getElementById('graph-info').textContent = id; });
+
+    /* ---------- API helpers ---------- */
+    async function apiGet(url) {
+      const r = await fetch(url);
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(data.detail || r.statusText);
+      return data;
+    }
+    async function apiPost(url, body) {
+      const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(data.detail || r.statusText);
+      return data;
+    }
+
+    const state = { repoId: null, repoUrl: null, graph: null };
+
+    /* ---------- ingest ---------- */
+    document.getElementById('ingest-form').addEventListener('submit', async e => {
+      e.preventDefault();
+      const url = document.getElementById('repo-url-input').value.trim();
+      if (!url) return;
+      const statusEl = document.getElementById('ingest-status');
+      statusEl.className = 'status-msg'; statusEl.textContent = 'Cloning and parsing…';
+      try {
+        const res = await apiPost('/api/ingest', { repo_url: url });
+        state.repoId = res.repo_id; state.repoUrl = url;
+        statusEl.textContent = `Ingested ${res.file_count} Python files, ${res.node_count} modules.`;
+        document.querySelectorAll('.dock-item[data-needs-repo]').forEach(el => el.classList.remove('disabled'));
+        document.getElementById('repo-label').textContent = url.replace('https://github.com/', '');
+        await Promise.all([loadGatekeeper(), loadIssues(), loadGraphView(), loadSecurity()]);
+      } catch (err) {
+        statusEl.className = 'status-msg error'; statusEl.textContent = 'Error: ' + err.message;
+      }
+    });
+
+    /* ---------- gatekeeper ---------- */
+    async function loadGatekeeper() {
+      const el = document.getElementById('gatekeeper-content');
+      el.innerHTML = '<p class="status-msg">Loading…</p>';
+      try {
+        const g = await apiGet(`/api/gatekeeper?repo_url=${encodeURIComponent(state.repoUrl)}`);
+        const good = g.liveness === 'active' && g.competition === 'healthy';
+        el.innerHTML = `
+      <div class="verdict ${good ? 'good' : 'warn'}">${good ? '✓ Looks like a good fit' : '⚠ Worth a closer look'}</div>
+      <div class="grid3">
+        <div class="stat-box"><div class="label">Liveness</div><div class="val">${g.days_since_last_push == null ? 'unknown' : g.days_since_last_push + ' days since last push'}</div><span class="pill ${g.liveness === 'active' ? 'pill-good' : 'pill-warn'}" style="margin-top:8px;">${g.liveness}</span></div>
+        <div class="stat-box"><div class="label">Competition</div><div class="val">${g.open_pull_requests} open PRs</div><span class="pill ${g.competition === 'healthy' ? 'pill-good' : 'pill-warn'}" style="margin-top:8px;">${g.competition}</span></div>
+        <div class="stat-box"><div class="label">Stars</div><div class="val">${g.stars}</div></div>
+      </div>
+      <div class="card" style="margin-top:16px;" id="gk-summary-card"><h3>Description</h3><p>${g.description || 'No description on GitHub.'}</p></div>`;
+        attachGlow(document.getElementById('gk-summary-card'), '#0F9B8E');
+      } catch (err) {
+        el.innerHTML = `<div class="card" style="background:var(--danger-bg);border-color:var(--danger);"><p style="color:var(--danger);">${err.message}</p></div>`;
+      }
+    }
+
+    /* ---------- issues ---------- */
+    async function loadIssues() {
+      const el = document.getElementById('issues-content');
+      el.innerHTML = '<p class="status-msg">Loading…</p>';
+      try {
+        const issues = await apiGet(`/api/issues?repo_url=${encodeURIComponent(state.repoUrl)}`);
+        if (!issues.length) { el.innerHTML = '<p class="status-msg">No open good-first-issue/help-wanted issues found.</p>'; return; }
+        el.innerHTML = issues.map(it => `
+      <div class="result-card">
+        <div class="result-head">
+          <div>
+            <div class="result-title">#${it.number} ${it.title}</div>
+            <div class="result-meta">${it.labels.join(', ')}</div>
+          </div>
+          ${it.in_progress ? '<span class="pill pill-neutral">Open PR references this</span>' : ''}
+        </div>
+        <div style="margin-top:10px;display:flex;gap:8px;">
+          <a class="btn" href="${it.url}" target="_blank" rel="noopener">View on GitHub</a>
+          <button class="btn btn-primary" ${it.in_progress ? 'disabled' : ''} onclick="startMissionFromIssue(${it.number}, ${JSON.stringify(it.title).replace(/"/g, '&quot;')})">Start mission</button>
+        </div>
+      </div>`).join('');
+      } catch (err) {
+        el.innerHTML = `<div class="card" style="background:var(--danger-bg);border-color:var(--danger);"><p style="color:var(--danger);">${err.message}</p></div>`;
+      }
+    }
+
+    async function startMissionFromIssue(number, title) {
+      const missionEl = document.getElementById('mission-content');
+      missionEl.innerHTML = '<p class="status-msg">Finding the most relevant file…</p>';
+      showView('mission');
+      try {
+        const query = title.split(/\s+/).slice(0, 4).join(' ');
+        const results = await apiGet(`/api/search?repo_id=${state.repoId}&q=${encodeURIComponent(query)}`);
+        const file = results.length ? results[0].file : state.graph.nodes[0].label;
+        const plan = await apiPost('/api/mission', { repo_id: state.repoId, file_path: file, title: `#${number} ${title}` });
+        renderMission(plan);
+      } catch (err) {
+        missionEl.innerHTML = `<div class="card" style="background:var(--danger-bg);border-color:var(--danger);"><p style="color:var(--danger);">${err.message}</p></div>`;
+      }
+    }
+
+    function renderMission(plan) {
+      document.getElementById('mission-content').innerHTML = `
+    <h2 style="font-size:16px;margin:0 0 12px;">${plan.title}</h2>
+    <div class="card"><h3>Mission steps</h3><ol class="steps">${plan.steps.map(s => `<li>${s}</li>`).join('')}</ol></div>
+    <div class="card"><h3>Terminal commands</h3><pre>${plan.commands}</pre></div>`;
+    }
+
+    /* ---------- search ---------- */
+    document.getElementById('search-form').addEventListener('submit', async e => {
+      e.preventDefault();
+      const q = document.getElementById('search-input').value.trim();
+      const el = document.getElementById('results');
+      if (!q) return;
+      el.innerHTML = '<p class="status-msg">Searching…</p>';
+      try {
+        const results = await apiGet(`/api/search?repo_id=${state.repoId}&q=${encodeURIComponent(q)}`);
+        if (!results.length) { el.innerHTML = '<p class="status-msg">No matches.</p>'; return; }
+        el.innerHTML = results.map(r => `
+      <div class="result-card">
+        <div class="result-files">${r.file}</div>
+        <div class="result-meta">match score ${r.score}</div>
+        <div style="margin-top:8px;"><button class="btn btn-primary" onclick='startMissionFromFile(${JSON.stringify(r.file)}, ${JSON.stringify(q)})'>Start mission on this file</button></div>
+      </div>`).join('');
+      } catch (err) {
+        el.innerHTML = `<p class="status-msg error">${err.message}</p>`;
+      }
+    });
+
+    async function startMissionFromFile(file, title) {
+      showView('mission');
+      document.getElementById('mission-content').innerHTML = '<p class="status-msg">Building mission plan…</p>';
+      try {
+        const plan = await apiPost('/api/mission', { repo_id: state.repoId, file_path: file, title });
+        renderMission(plan);
+      } catch (err) {
+        document.getElementById('mission-content').innerHTML = `<p class="status-msg error">${err.message}</p>`;
+      }
+    }
+
+    /* ---------- graph ---------- */
+    async function loadGraphView() {
+      try {
+        const g = await apiGet(`/api/graph/${state.repoId}`);
+        state.graph = g;
+        graphApi.loadGraph(g.nodes, g.edges);
+        buildImpactWheel(g);
+      } catch (err) {
+        document.getElementById('graph-info').textContent = 'Error: ' + err.message;
+      }
+    }
+
+    function buildImpactWheel(g) {
+      const incoming = {};
+      g.edges.forEach(e => incoming[e.to] = (incoming[e.to] || 0) + 1);
+      const ranked = [...g.nodes].sort((a, b) => (incoming[b.id] || 0) - (incoming[a.id] || 0)).slice(0, 8);
+      const items = ranked.map(n => ({ label: n.label, id: n.id }));
+      impactApi.loadGraph(g.nodes, g.edges);
+      buildWheel(document.getElementById('impact-wheel'), items, item => applyImpact(item.id));
+      document.getElementById('imp-total').textContent = g.nodes.length;
+    }
+
+    async function applyImpact(nodeId) {
+      try {
+        const res = await apiGet(`/api/impact/${state.repoId}/${encodeURIComponent(nodeId)}`);
+        const g = state.graph;
+        g.nodes.forEach(n => impactApi.setNodeStyle(n.id, { color: 0x8C8878, opacity: 0.2, emissiveIntensity: 0.08 }));
+        impactApi.getEdgeKeys().forEach(k => impactApi.setEdgeStyle(k, { color: 0x8C8878, opacity: 0.1 }));
+        impactApi.setNodeStyle(res.center, { color: 0xE11D48, opacity: 1, emissiveIntensity: 0.9 });
+        res.direct.forEach(id => {
+          impactApi.setNodeStyle(id, { color: 0xD97706, opacity: 0.95, emissiveIntensity: 0.55 });
+          impactApi.setEdgeStyle(id + '__' + res.center, { color: 0xE11D48, opacity: 0.9 });
+        });
+        res.indirect.forEach(id => {
+          impactApi.setNodeStyle(id, { color: 0xD97706, opacity: 0.55, emissiveIntensity: 0.3 });
+        });
+        document.getElementById('imp-direct-count').textContent = res.direct.length + ' files';
+        document.getElementById('imp-indirect-count').textContent = res.indirect.length + ' files';
+      } catch (err) {
+        document.getElementById('imp-direct-count').textContent = 'error';
+      }
+    }
+
+    /* ---------- security ---------- */
+    async function loadSecurity() {
+      const el = document.getElementById('security-content');
+      el.innerHTML = '<p class="status-msg">Loading…</p>';
+      try {
+        const deps = await apiGet(`/api/security/${state.repoId}`);
+        if (!deps.length) { el.innerHTML = '<div class="card"><p>No requirements.txt found in this repo, or it has no pinned dependencies to check.</p></div>'; return; }
+        const badCount = deps.filter(d => d.status === 'vulnerable').length;
+        el.innerHTML = `
+      ${badCount ? `<div class="card" style="background:var(--danger-bg);border-color:var(--danger);"><p style="color:var(--danger);">${badCount} dependencies have known vulnerabilities (via OSV.dev).</p></div>` : ''}
+      <div class="card"><table class="sec-table"><thead><tr><th>Package</th><th>Version</th><th>Status</th></tr></thead>
+      <tbody>${deps.map(d => `<tr><td class="mono">${d.name}</td><td class="mono">${d.version || '—'}</td>
+        <td>${d.status === 'ok' ? '<span class="pill pill-good">No known issues</span>' :
+            d.status === 'vulnerable' ? `<span class="pill pill-bad">${d.note}</span>` :
+              `<span class="pill pill-neutral">${d.note}</span>`}</td></tr>`).join('')}</tbody></table></div>`;
+      } catch (err) {
+        el.innerHTML = `<p class="status-msg error">${err.message}</p>`;
+      }
+    }
+
+    showView('ingest');
+  </script>
+</body>
+
+</html>

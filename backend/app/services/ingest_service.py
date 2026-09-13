@@ -3,15 +3,18 @@ IngestService — handles repository cloning and GitHub metadata fetching.
 """
 
 import asyncio
+import logging
 import re
 import tempfile
 from pathlib import Path
 
 import httpx
-from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
+from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception
 from pydantic import BaseModel, field_validator
 
 from app.config import get_settings
+
+logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
@@ -25,14 +28,17 @@ class IngestRequest(BaseModel):
     @field_validator("github_url")
     @classmethod
     def validate_github_url(cls, v: str) -> str:
-        v = v.strip().rstrip("/")
-        pattern = r"^https://github\.com/[\w.\-]+/[\w.\-]+$"
-        if not re.match(pattern, v):
+        # Accept what people actually paste: no scheme, www., .git, /tree/main, trailing slash.
+        m = re.match(
+            r"^(?:https?://)?(?:www\.)?github\.com/([\w.\-]+)/([\w.\-]+?)(?:\.git)?(?:/.*)?$",
+            v.strip(),
+        )
+        if not m:
             raise ValueError(
                 "URL must be a valid GitHub repository URL, e.g. "
                 "https://github.com/owner/repo"
             )
-        return v
+        return f"https://github.com/{m.group(1)}/{m.group(2)}"
 
 
 class RepoMetadata(BaseModel):
@@ -70,29 +76,54 @@ async def clone_repo(url: str, dest: str) -> Path:
     Shallow-clone `url` into `dest` using a native git subprocess.
     Uses depth=1 to grab only the latest commit (fast, rate-limit safe).
     """
+    import os
     import subprocess
     loop = asyncio.get_running_loop()
-    
+
     def run_git_clone():
         return subprocess.run(
             ["git", "clone", "--depth", "1", url, dest],
             capture_output=True,
-            text=True
+            text=True,
+            timeout=180,
+            # Never block on an interactive credential prompt — fail fast instead.
+            env={**os.environ, "GIT_TERMINAL_PROMPT": "0"},
         )
-        
-    result = await loop.run_in_executor(None, run_git_clone)
+
+    try:
+        result = await loop.run_in_executor(None, run_git_clone)
+    except subprocess.TimeoutExpired:
+        raise IngestError(504, "Cloning took longer than 3 minutes — the repository is too large to ingest.")
 
     if result.returncode != 0:
         err = result.stderr.strip()
-        raise RuntimeError(f"git clone failed: {err}")
+        if "not found" in err.lower() or "could not read username" in err.lower() or "authentication" in err.lower():
+            raise IngestError(
+                404,
+                "Repository not found, or it is private. DevLens can only ingest public "
+                "repositories (or private ones your GITHUB_PAT can access).",
+            )
+        raise IngestError(400, f"git clone failed: {err[-300:]}")
 
     return Path(dest)
+
+
+class IngestError(Exception):
+    def __init__(self, status_code: int, message: str):
+        super().__init__(message)
+        self.status_code = status_code
+
+
+def _is_transient(exc: BaseException) -> bool:
+    if isinstance(exc, httpx.HTTPStatusError):
+        return exc.response.status_code == 429 or exc.response.status_code >= 500
+    return isinstance(exc, httpx.TransportError)
 
 
 @retry(
     stop=stop_after_attempt(3),
     wait=wait_exponential(multiplier=1, min=2, max=10),
-    retry=retry_if_exception_type(httpx.HTTPStatusError),
+    retry=retry_if_exception(_is_transient),
     reraise=True,
 )
 async def fetch_metadata(
@@ -152,32 +183,34 @@ async def ingest_repository(request: IngestRequest) -> IngestResponse:
     parent_temp = tempfile.mkdtemp(prefix=f"devlens_")
     dest = str(Path(parent_temp) / f"{owner}_{repo}")
 
-    try:
-        # Run clone and metadata fetch concurrently
-        clone_task = asyncio.create_task(clone_repo(request.github_url, dest))
-        meta_task = asyncio.create_task(
-            fetch_metadata(owner, repo, pat=request.github_pat)
+    # Clone and metadata run concurrently. The clone is what matters; metadata is
+    # display-only, so a private repo the PAT can't see (API 404) must not fail ingest.
+    clone_result, meta_result = await asyncio.gather(
+        clone_repo(request.github_url, dest),
+        fetch_metadata(owner, repo, pat=request.github_pat),
+        return_exceptions=True,
+    )
+
+    if isinstance(clone_result, BaseException):
+        if isinstance(clone_result, IngestError):
+            raise clone_result
+        raise IngestError(500, f"Clone failed: {clone_result!r}")
+    clone_path = clone_result
+
+    if isinstance(meta_result, BaseException):
+        logger.warning("Metadata fetch failed for %s (continuing without it): %r", repo_id, meta_result)
+        metadata = RepoMetadata(
+            name=repo,
+            full_name=repo_id,
+            description=None,
+            stars=0,
+            forks=0,
+            language=None,
+            default_branch="main",
+            html_url=request.github_url,
         )
-        clone_path, metadata = await asyncio.gather(clone_task, meta_task)
-    except Exception as exc:
-        import traceback
-        traceback.print_exc()
-        return IngestResponse(
-            repo_id=repo_id,
-            metadata=RepoMetadata(
-                name=repo,
-                full_name=repo_id,
-                description=None,
-                stars=0,
-                forks=0,
-                language=None,
-                default_branch="main",
-                html_url=request.github_url,
-            ),
-            clone_path=dest,
-            status="error",
-            message=repr(exc),
-        )
+    else:
+        metadata = meta_result
 
     return IngestResponse(
         repo_id=repo_id,

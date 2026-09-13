@@ -5,7 +5,12 @@ DevLens Backend – FastAPI entrypoint
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.routers import repository, intelligence, chatbot
+from app.routers import repository, intelligence, chatbot, auth, search, memory
+from app.storage.db import Base, engine, ensure_columns
+from app.storage import models  # noqa: F401 — registers tables on Base.metadata
+
+Base.metadata.create_all(bind=engine)
+ensure_columns()
 
 app = FastAPI(
     title="DevLens API",
@@ -35,6 +40,9 @@ app.add_middleware(
 app.include_router(repository.router)
 app.include_router(intelligence.router)
 app.include_router(chatbot.router)
+app.include_router(auth.router)
+app.include_router(search.router)
+app.include_router(memory.router)
 
 
 # ---------------------------------------------------------------------------

@@ -4,9 +4,14 @@ Repository router — all endpoints under /api/v1/repository
 
 import asyncio
 import logging
-from fastapi import APIRouter, BackgroundTasks, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
+from sqlalchemy.orm import Session
 
-from app.services.ingest_service import IngestRequest, IngestResponse, ingest_repository
+from app.dependencies import get_current_user_optional
+from app.storage.db import get_db
+from app.storage.models import User
+
+from app.services.ingest_service import IngestError, IngestRequest, IngestResponse, ingest_repository
 from app.services.parser import GraphData, parse_repository
 from app.storage.hybrid_storage import storage_manager
 
@@ -15,7 +20,12 @@ router = APIRouter(prefix="/api/v1/repository", tags=["repository"])
 
 
 @router.post("/ingest", response_model=IngestResponse, summary="Ingest a GitHub repository")
-async def ingest(request: IngestRequest, background_tasks: BackgroundTasks) -> IngestResponse:
+async def ingest(
+    request: IngestRequest,
+    background_tasks: BackgroundTasks,
+    user: User | None = Depends(get_current_user_optional),
+    db: Session = Depends(get_db),
+) -> IngestResponse:
     """
     1. Validate the GitHub URL.
     2. Clone the repo (depth=1) to a temp directory.
@@ -25,18 +35,26 @@ async def ingest(request: IngestRequest, background_tasks: BackgroundTasks) -> I
     """
     try:
         response = await ingest_repository(request)
+    except IngestError as exc:
+        logger.warning("Ingest rejected for %s: %s", request.github_url, exc)
+        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
     except Exception as exc:
         logger.exception("Unhandled exception during ingest")
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
-    if response.status == "error":
-        logger.error("Ingest error for %s: %s", request.github_url, response.message)
-        raise HTTPException(status_code=500, detail=response.message or "Ingestion failed — check server logs.")
-
     # Kick off parsing in the background so the HTTP response is instant
     store = storage_manager.get_store(response.repo_id, is_guest=True)
+    store.delete("graph")  # a re-ingest must not report the previous run's graph as done
     store.set("status", "parsing")
     background_tasks.add_task(_run_parser_and_store, response)
+
+    if user:  # Phase 14 memory — anonymous ingest is unaffected
+        from app.services.memory_service import record_activity
+        owner, repo = response.repo_id.split("/", 1)
+        try:
+            record_activity(db, user.github_id, owner, repo, status="explored", title=response.metadata.description)
+        except Exception:
+            logger.exception("Failed to record ingest activity")
 
     return response
 
@@ -78,18 +96,12 @@ async def get_status(owner: str, repo: str) -> dict:
     """
     repo_id = f"{owner}/{repo}"
     store = storage_manager.get_store(repo_id, is_guest=True)
-    
-    # If the store has 'graph', parsing is done.
-    # If it has 'clone_path' but no graph, it might still be parsing or failed.
-    # Since we set clone_path after parsing in _run_parser_and_store, actually both are set together.
-    # Wait, during ingest we don't set anything in the RAMStore until parsing finishes!
-    # Let's fix that too: we should set "status": "parsing" in RAMStore right before kicking off the background task, so we know it's tracking.
+    status = store.get("status")
+    if status in ("parsing", "failed"):
+        return {"status": status}
     if store.get("graph") is not None:
         return {"status": "completed"}
-    elif store.get("status") == "parsing":
-        return {"status": "parsing"}
-    else:
-        return {"status": "not_found"}
+    return {"status": "not_found"}
 
 # ---------------------------------------------------------------------------
 # Internal background task

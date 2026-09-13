@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
     reraise=True,
 )
 async def fetch_issue_by_number(
-    owner: str, repo: str, issue_number: int
+    owner: str, repo: str, issue_number: int, token: str | None = None
 ) -> Dict[str, Any]:
     """
     Fetch a single GitHub issue by its number using the REST API.
@@ -36,8 +36,9 @@ async def fetch_issue_by_number(
         "X-GitHub-Api-Version": "2022-11-28",
         "User-Agent": "DevLens-REST-Client",
     }
-    if settings.github_pat:
-        headers["Authorization"] = f"Bearer {settings.github_pat}"
+    auth_token = token or settings.github_pat
+    if auth_token:
+        headers["Authorization"] = f"Bearer {auth_token}"
 
     async with httpx.AsyncClient(timeout=15.0) as client:
         resp = await client.get(
@@ -90,20 +91,41 @@ query GetBeginnerIssues($owner: String!, $repo: String!) {
 }
 """
 
+def _has_open_referencing_pr(timeline_items: List[Dict[str, Any]]) -> tuple[bool, List[str]]:
+    """
+    Walk a GraphQL `timelineItems` (CROSS_REFERENCED_EVENT) list and check
+    whether any referencing PullRequest is still OPEN. Shared by
+    `fetch_beginner_issues` and Phase 10's global search "already claimed?"
+    check — do not duplicate this logic elsewhere.
+    """
+    in_progress = False
+    active_prs: List[str] = []
+    for event in timeline_items or []:
+        if not event:
+            continue
+        source = event.get("source")
+        if source and source.get("state") == "OPEN":
+            in_progress = True
+            active_prs.append(source.get("url"))
+    return in_progress, active_prs
+
+
 @retry(
     stop=stop_after_attempt(3),
     wait=wait_exponential(multiplier=1, min=2, max=10),
     reraise=True,
 )
-async def fetch_beginner_issues(owner: str, repo: str) -> List[Dict[str, Any]]:
+async def fetch_beginner_issues(
+    owner: str, repo: str, token: str | None = None
+) -> List[Dict[str, Any]]:
     """
     Fetches up to 20 beginner-friendly issues.
     Checks if there's an OPEN PR referencing them to flag them as 'In Progress'.
     """
     settings = get_settings()
-    
+
     headers = {
-        "Authorization": f"Bearer {settings.github_pat}",
+        "Authorization": f"Bearer {token or settings.github_pat}",
         "Content-Type": "application/json",
         "User-Agent": "DevLens-GraphQL-Client"
     }
@@ -138,19 +160,9 @@ async def fetch_beginner_issues(owner: str, repo: str) -> List[Dict[str, Any]]:
             if not issue:
                 continue
             
-            in_progress = False
-            active_prs = []
-            
-            # Check timeline items for CrossReferencedEvent involving an OPEN PullRequest
             timeline = issue.get("timelineItems", {}).get("nodes", [])
-            for event in timeline:
-                if not event:
-                    continue
-                source = event.get("source")
-                if source and source.get("state") == "OPEN":
-                    in_progress = True
-                    active_prs.append(source.get("url"))
-                    
+            in_progress, active_prs = _has_open_referencing_pr(timeline)
+
             formatted_issues.append({
                 "number": issue.get("number"),
                 "title": issue.get("title"),

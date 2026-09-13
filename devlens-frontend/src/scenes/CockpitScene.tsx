@@ -4,13 +4,17 @@ import { SidePanel } from '../components/Graph/SidePanel';
 import { CodeViewer } from '../components/Panels/CodeViewer';
 import { IntentPanel } from '../components/Panels/IntentPanel';
 import { ExplainPanel } from '../components/Panels/ExplainPanel';
+import { SkillFingerprintPanel } from '../components/Panels/SkillFingerprintPanel';
 import { StateMachine } from '../core/StateMachine';
 import { AnimatePresence, motion } from 'framer-motion';
 import { ANIMATION } from '../core/AnimationTimings';
 import { ArchitectPanel } from '../components/Panels/ArchitectPanel';
+import { connectedNodes, folderColors } from '../components/Graph/GraphEffects';
+import { useMemo } from 'react';
 
 export const CockpitScene = () => {
-    const { mode, selectedFile, setBlastTarget, setSelectedFile, setFocusFileContent } = useAppStore();
+    const { mode, selectedFile, setBlastTarget, setSelectedFile, setFocusFileContent, githubUser, graphData } = useAppStore();
+    const legend = useMemo(() => folderColors(connectedNodes(graphData)).legend, [graphData]);
 
     // Hide cockpit entirely during landing or ingesting
     if (mode === 'landing' || mode === 'ingesting') return null;
@@ -45,9 +49,23 @@ export const CockpitScene = () => {
                 <MolecularGraph />
             </motion.div>
 
-            {/* HUD Label */}
-            <div className="absolute top-6 left-6 text-primary tracking-widest text-sm opacity-50 z-50 pointer-events-none uppercase font-mono">
-                {isFocus ? 'Sector: Focus' : 'Sector: Deep Code'}
+            {/* HUD Label + folder colour legend */}
+            <div className="absolute top-6 left-6 z-50 pointer-events-none font-mono">
+                <div className="text-primary tracking-widest text-sm opacity-60 uppercase">
+                    {isFocus ? 'Sector: Focus' : 'Sector: Deep Code'}
+                    <span className="ml-3 text-white/40 normal-case">· {githubUser ? `@${githubUser.login}` : 'guest'}</span>
+                </div>
+                {legend.length > 0 && !isFocus && (
+                    <div className="mt-2 flex max-w-[60vw] flex-wrap gap-x-3 gap-y-1">
+                        {legend.map((l) => (
+                            <span key={l.folder} className="inline-flex items-center gap-1.5 text-[11px] text-white/55">
+                                <span className="size-2 rounded-full" style={{ background: l.color, boxShadow: `0 0 8px ${l.color}` }} />
+                                {l.folder}
+                                <span className="text-white/25">{l.count}</span>
+                            </span>
+                        ))}
+                    </div>
+                )}
             </div>
 
             {/* Close Map / Exit Focus Button — shifts left when SidePanel is open to not cover its ✕ */}
@@ -75,14 +93,17 @@ export const CockpitScene = () => {
               ALWAYS anchored to the LEFT side to avoid overlap with SidePanel on the right.
             */}
             <div
-                className="absolute top-16 left-6 z-[80] flex flex-col gap-3 pointer-events-auto overflow-y-auto"
-                style={{ width: 360, maxHeight: 'calc(100vh - 96px)' }}
+                className="absolute top-24 left-6 z-[80] flex flex-col gap-3 pointer-events-auto overflow-y-auto"
+                style={{ width: 360, maxHeight: 'calc(100vh - 128px)' }}
             >
                 <AnimatePresence mode="popLayout">
                     <IntentPanel />
                 </AnimatePresence>
                 <AnimatePresence mode="popLayout">
                     <ExplainPanel />
+                </AnimatePresence>
+                <AnimatePresence mode="popLayout">
+                    <SkillFingerprintPanel />
                 </AnimatePresence>
             </div>
 

@@ -1,7 +1,7 @@
 """
-AI client — everything runs through OpenRouter now.
+AI client — everything runs through OpenRouter, free-tier models only.
   - Embeddings: NVIDIA Nemotron-3 Embed 1B (free endpoint), batched.
-  - Chat:       Claude 3.7 Sonnet.
+  - Chat:       NVIDIA Nemotron-3 Super 120B (free), with free fallbacks.
 (Module name kept as `bedrock_client` for import stability — AWS Bedrock was
 removed when embeddings moved to OpenRouter.)
 """
@@ -13,6 +13,7 @@ from tenacity import (
     retry,
     stop_after_attempt,
     wait_exponential,
+    retry_if_exception,
     retry_if_exception_type,
 )
 
@@ -22,7 +23,13 @@ logger = logging.getLogger(__name__)
 
 OPENROUTER_BASE = "https://openrouter.ai/api/v1"
 EMBED_MODEL = "nvidia/nemotron-3-embed-1b:free"
-CHAT_MODEL = "minimax/minimax-m3:free"
+# Free models get retired or rate-limited upstream without notice, so OpenRouter
+# tries these in order. All must stay ":free" — the account has no credits.
+CHAT_MODELS = [
+    "nvidia/nemotron-3-super-120b-a12b:free",
+    "google/gemma-4-31b-it:free",
+    "google/gemma-4-26b-a4b-it:free",
+]
 
 
 def _headers() -> dict[str, str]:
@@ -78,30 +85,53 @@ async def embed_text(text: str) -> list[float]:
 # Chat
 # ---------------------------------------------------------------------------
 
+class UpstreamError(Exception):
+    """OpenRouter answered 200 but carried a provider error instead of a completion."""
+
+
+def _is_transient(exc: BaseException) -> bool:
+    """Retry rate limits, upstream 5xx and network blips — not 4xx like a bad key or dead model."""
+    if isinstance(exc, UpstreamError):
+        return True
+    if isinstance(exc, httpx.HTTPStatusError):
+        return exc.response.status_code == 429 or exc.response.status_code >= 500
+    return isinstance(exc, httpx.TransportError)
+
+
 @retry(
     stop=stop_after_attempt(3),
     wait=wait_exponential(multiplier=1, min=2, max=10),
-    retry=retry_if_exception_type(httpx.HTTPStatusError),
+    retry=retry_if_exception(_is_transient),
     reraise=True,
 )
 async def call_claude(system_prompt: str, user_message: str, max_tokens: int = 2048) -> str:
-    """Async wrapper for the OpenRouter Chat API."""
+    """Async wrapper for the OpenRouter Chat API (name kept for import stability)."""
     payload = {
-        "model": CHAT_MODEL,
+        "models": CHAT_MODELS,
         "messages": [
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_message},
         ],
         "max_tokens": max_tokens,
+        # Nemotron is a reasoning model: hidden thinking otherwise eats the token budget
+        # and adds ~8s per call. Low effort keeps quality acceptable and calls fast.
+        "reasoning": {"effort": "low", "exclude": True},
     }
 
-    async with httpx.AsyncClient(timeout=60.0) as client:
+    async with httpx.AsyncClient(timeout=90.0) as client:
         response = await client.post(
             f"{OPENROUTER_BASE}/chat/completions",
             headers=_headers(),
             json=payload,
         )
+        if response.status_code >= 400:
+            logger.error("OpenRouter chat error %s: %s", response.status_code, response.text[:300])
         response.raise_for_status()
         data = response.json()
 
-    return data["choices"][0]["message"]["content"]
+    if not data.get("choices"):
+        raise UpstreamError(f"OpenRouter returned no completion: {str(data.get('error', data))[:200]}")
+    content = data["choices"][0]["message"].get("content")
+    if not content:
+        raise ValueError(f"OpenRouter returned an empty completion (model={data.get('model')})")
+    return content

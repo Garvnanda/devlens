@@ -456,6 +456,7 @@ async def run_full_investigation(
     Returns the complete mission payload.
     """
     # 0. Fetch real issue details from GitHub if issue_number is given
+    issue_title = None
     if issue_number is not None:
         from app.services.github_issues import fetch_issue_by_number
         try:
@@ -467,6 +468,7 @@ async def run_full_investigation(
             if gh_issue.get("body"):
                 parts.append(f"\n{gh_issue['body'][:4000]}")
             issue_text = "\n".join(parts)
+            issue_title = gh_issue["title"]
             logger.info("Fetched GitHub issue #%d: %s", issue_number, gh_issue["title"])
         except Exception as exc:
             logger.warning(
@@ -531,6 +533,7 @@ async def run_full_investigation(
         "blast_radius": blast_radius,
         "plan": plan,
         "git_commands": git_commands,
+        "issue_title": issue_title,
         "reply": _format_full_reply(mode, plan, relevant_files, blast_radius, git_commands),
     }
 

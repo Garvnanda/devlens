@@ -1,0 +1,125 @@
+{
+  "_note": "Hand-maintained seed. Windows are recurring month-day ranges (MM-DD) that roll forward each year, so the list never goes stale on its own — but exact dates shift year to year. dates_confirmed=false means the window is the program's typical timing, not this year's announced dates; always check the official URL. Review and update this file before each season.",
+  "last_reviewed": "2026-09-13",
+  "programs": [
+    {
+      "id": "hacktoberfest",
+      "name": "Hacktoberfest",
+      "organizer": "DigitalOcean",
+      "url": "https://hacktoberfest.com",
+      "kind": "event",
+      "windows": [{ "label": "Contribution month", "start": "10-01", "end": "10-31" }],
+      "dates_confirmed": false,
+      "eligibility": "Anyone. Pull requests to participating public repositories count.",
+      "reward": "Digital badges; historically tree planting / swag for early finishers",
+      "focus": ["beginner friendly", "any language", "documentation", "web", "javascript", "python"]
+    },
+    {
+      "id": "gsoc",
+      "name": "Google Summer of Code",
+      "organizer": "Google",
+      "url": "https://summerofcode.withgoogle.com",
+      "kind": "mentorship",
+      "windows": [{ "label": "Contributor applications (typical)", "start": "03-17", "end": "04-01" }],
+      "dates_confirmed": false,
+      "eligibility": "18+ and new to open source (students and beginners).",
+      "reward": "Paid stipend, mentored 12+ week project",
+      "focus": ["python", "c++", "javascript", "machine learning", "systems", "web", "mobile", "compilers"]
+    },
+    {
+      "id": "outreachy",
+      "name": "Outreachy",
+      "organizer": "Software Freedom Conservancy",
+      "url": "https://www.outreachy.org",
+      "kind": "internship",
+      "windows": [
+        { "label": "May–August cohort applications (typical)", "start": "01-15", "end": "02-10" },
+        { "label": "December–March cohort applications (typical)", "start": "08-01", "end": "09-10" }
+      ],
+      "dates_confirmed": false,
+      "eligibility": "People subject to systemic bias or underrepresented in the tech industry of their country.",
+      "reward": "Paid remote internship",
+      "focus": ["open source", "documentation", "python", "javascript", "linux", "design"]
+    },
+    {
+      "id": "lfx-mentorship",
+      "name": "LFX Mentorship",
+      "organizer": "Linux Foundation",
+      "url": "https://lfx.linuxfoundation.org/tools/mentorship",
+      "kind": "mentorship",
+      "windows": [
+        { "label": "Spring term applications (typical)", "start": "01-15", "end": "02-15" },
+        { "label": "Summer term applications (typical)", "start": "04-15", "end": "05-15" },
+        { "label": "Fall term applications (typical)", "start": "07-15", "end": "08-15" }
+      ],
+      "dates_confirmed": false,
+      "eligibility": "Students and early-career developers; project-specific skill requirements.",
+      "reward": "Paid stipend, mentored term",
+      "focus": ["cloud native", "kubernetes", "go", "linux kernel", "c", "rust", "security", "networking"]
+    },
+    {
+      "id": "mlh-fellowship",
+      "name": "MLH Fellowship",
+      "organizer": "Major League Hacking",
+      "url": "https://fellowship.mlh.io",
+      "kind": "fellowship",
+      "windows": [
+        { "label": "Spring batch applications (typical)", "start": "10-15", "end": "12-01" },
+        { "label": "Summer batch applications (typical)", "start": "02-15", "end": "04-15" },
+        { "label": "Fall batch applications (typical)", "start": "06-01", "end": "07-31" }
+      ],
+      "dates_confirmed": false,
+      "eligibility": "Students and recent graduates; application includes a code sample.",
+      "reward": "Stipend, pod-based open source / production engineering work",
+      "focus": ["open source", "web", "javascript", "python", "production engineering", "devops"]
+    },
+    {
+      "id": "gssoc",
+      "name": "GirlScript Summer of Code",
+      "organizer": "GirlScript Foundation",
+      "url": "https://gssoc.girlscript.tech",
+      "kind": "program",
+      "windows": [{ "label": "Contributor registration (typical)", "start": "03-01", "end": "04-15" }],
+      "dates_confirmed": false,
+      "eligibility": "Open to all, strongly beginner focused; large India-based community.",
+      "reward": "Certificates, leaderboard prizes",
+      "focus": ["beginner friendly", "web", "javascript", "react", "python", "machine learning"]
+    },
+    {
+      "id": "season-of-kde",
+      "name": "Season of KDE",
+      "organizer": "KDE",
+      "url": "https://season.kde.org",
+      "kind": "mentorship",
+      "windows": [{ "label": "Applications (typical)", "start": "12-01", "end": "01-10" }],
+      "dates_confirmed": false,
+      "eligibility": "Anyone; mentored projects in the KDE ecosystem.",
+      "reward": "Certificate, KDE swag, mentorship",
+      "focus": ["c++", "qt", "linux desktop", "documentation", "translation", "design"]
+    },
+    {
+      "id": "24-pull-requests",
+      "name": "24 Pull Requests",
+      "organizer": "Community",
+      "url": "https://24pullrequests.com",
+      "kind": "event",
+      "windows": [{ "label": "Advent contribution drive", "start": "12-01", "end": "12-24" }],
+      "dates_confirmed": false,
+      "eligibility": "Anyone with a GitHub account.",
+      "reward": "Community recognition",
+      "focus": ["beginner friendly", "any language", "documentation"]
+    },
+    {
+      "id": "summer-of-bitcoin",
+      "name": "Summer of Bitcoin",
+      "organizer": "Summer of Bitcoin",
+      "url": "https://www.summerofbitcoin.org",
+      "kind": "internship",
+      "windows": [{ "label": "Applications (typical)", "start": "02-01", "end": "03-15" }],
+      "dates_confirmed": false,
+      "eligibility": "University students worldwide.",
+      "reward": "Paid remote internship",
+      "focus": ["bitcoin", "rust", "c++", "python", "cryptography", "lightning"]
+    }
+  ]
+}

@@ -53,7 +53,7 @@ export const initCommands = () => {
             writeOutput('  ingest <url>      - Ingest a GitHub repository');
             writeOutput('  gatecheck <url>   - Audit repo health before ingestion');
             writeOutput('  map               - View the molecular dependency graph');
-            writeOutput('  home              - Return to the Feature Explorer map');
+            writeOutput('  home              - Replay the DevLens walkthrough');
             writeOutput('  blast <file>      - Trigger blast animation on a file node');
             writeOutput('  focus <file>      - Open code viewer for a file');
             writeOutput('  intent <file>     - Show architectural intent from commits');
@@ -62,7 +62,54 @@ export const initCommands = () => {
             writeOutput('  history           - View recent merged PRs (Institutional Memory)');
             writeOutput('  setup             - Generate local setup commands for the repo');
             writeOutput('  architect <issue> - Start an agentic mission to solve an issue');
+            writeOutput('  login             - Sign in with GitHub');
+            writeOutput('  logout            - Sign out');
+            writeOutput('  calibrate         - Set your level/language/goal manually');
             writeOutput('  clear             - Clear terminal output');
+        }
+    });
+
+    registerCommand({
+        name: 'login',
+        description: 'Sign in with GitHub',
+        execute: ({ writeOutput }) => {
+            const store = useAppStore.getState();
+            if (store.isAuthenticated) {
+                writeOutput(`Already signed in as ${store.githubUser?.login}.`);
+                return;
+            }
+            store.setShowAuthModal(true);
+            writeOutput('Opening sign-in...');
+        }
+    });
+
+    registerCommand({
+        name: 'logout',
+        description: 'Sign out',
+        execute: async ({ writeOutput }) => {
+            const store = useAppStore.getState();
+            if (!store.isAuthenticated) {
+                writeOutput('Not signed in.');
+                return;
+            }
+            try {
+                await apiClient.logout();
+            } catch {
+                // Best-effort — clear local state regardless.
+            }
+            localStorage.removeItem('devlens_token');
+            store.setAuthState({ authToken: null, isAuthenticated: false, githubUser: null });
+            store.setSkillFingerprint(null);
+            writeOutput('Signed out.');
+        }
+    });
+
+    registerCommand({
+        name: 'calibrate',
+        description: 'Set your level/language/goal manually',
+        execute: ({ writeOutput }) => {
+            useAppStore.getState().setShowOnboardingModal(true);
+            writeOutput('Opening calibration...');
         }
     });
 
@@ -76,18 +123,18 @@ export const initCommands = () => {
 
     registerCommand({
         name: 'home',
-        description: 'Return to the Feature Explorer map',
+        description: 'Replay the DevLens walkthrough',
         execute: async ({ writeOutput }) => {
             const store = useAppStore.getState();
             if (store.mode === 'feature-explorer') {
-                writeOutput('Already on the Feature Explorer page.', '#EF4444');
+                writeOutput('Already on the walkthrough.', '#EF4444');
                 return;
             }
             if (store.mode === 'ingesting') {
                 writeOutput('Cannot navigate while ingesting.', '#EF4444');
                 return;
             }
-            writeOutput('Returning to Feature Explorer map...');
+            writeOutput('Opening the walkthrough...');
 
             // Clean up selections
             store.setSelectedFile(null);
@@ -324,21 +371,24 @@ export const initCommands = () => {
             const url = args[0].replace(/^<|>$/g, '').trim();
             const store = useAppStore.getState();
 
+            if (store.mode === 'ingesting') {
+                writeOutput('An ingestion is already running — wait for it to finish.', '#EF4444');
+                return;
+            }
+
             if (StateMachine.transition('ingesting')) {
                 store.setRepoUrl(url);
+                store.setGraphData(null);
                 writeOutput(`Initiating ingestion for ${url}...`);
 
                 try {
-                    writeOutput('Connecting to pipeline...');
-                    await apiClient.post('/repository/ingest', { github_url: url });
+                    writeOutput('Cloning repository...');
+                    const res = await apiClient.post('/repository/ingest', { github_url: url });
 
-                    const match = url.match(/github\.com\/([^/]+)\/([^/]+)/);
-                    if (!match) throw new Error('Invalid GitHub URL format.');
-                    const owner = match[1];
-                    let repo = match[2];
-                    if (repo.endsWith('.git')) repo = repo.slice(0, -4);
-
-                    store.setRepoConfig(url, owner, repo);
+                    // Backend normalizes the URL (.git, /tree/main, missing https://) — trust its repo_id.
+                    const [owner, repo] = String(res.repo_id).split('/');
+                    const cleanUrl = `https://github.com/${owner}/${repo}`;
+                    store.setRepoConfig(cleanUrl, owner, repo);
 
                     let isParsing = true;
                     while (isParsing) {
@@ -346,14 +396,14 @@ export const initCommands = () => {
                         const statusRes = await apiClient.get(`/repository/status/${owner}/${repo}`);
 
                         if (statusRes.status === 'completed') {
-                            writeOutput('Vectorization complete.');
+                            writeOutput('Dependency graph built.');
                             isParsing = false;
                         } else if (statusRes.status === 'failed' || statusRes.status === 'error') {
                             throw new Error('Pipeline parser failed.');
                         } else if (statusRes.status === 'not_found') {
                             throw new Error('Repository tracking lost.');
                         } else {
-                            writeOutput('Parsing AST and vectorizing source code...');
+                            writeOutput('Parsing source files...');
                         }
                     }
 

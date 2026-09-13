@@ -137,6 +137,9 @@ celerybeat.pid
 # ChromaDB local persistence (regenerated at runtime)
 backend/chroma_db/
 
+# SQLite persistent store (Phase 9/14, regenerated at runtime)
+backend/devlens.db
+
 # Environments
 .env
 .envrc

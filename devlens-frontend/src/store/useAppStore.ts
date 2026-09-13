@@ -36,6 +36,18 @@ export interface AppStore {
         language: "english" | "hindi" | "hinglish";
         goal: "learning" | "contributing";
     };
+    // Phase 9 — Identity Layer
+    authToken: string | null;
+    isAuthenticated: boolean;
+    githubUser: { login: string; avatarUrl: string } | null;
+    skillFingerprint: {
+        language_distribution: Record<string, number>;
+        avg_repo_complexity: number;
+        contribution_recency_days: number;
+    } | null;
+    fingerprintLoading: boolean;
+    showAuthModal: boolean;
+    showOnboardingModal: boolean;
 
     setMode: (mode: AppMode) => void;
     setRepoUrl: (url: string) => void;
@@ -53,6 +65,12 @@ export interface AppStore {
     setExplainLoading: (loading: boolean) => void;
     setExplainError: (error: string | null) => void;
     setMissionState: (update: Partial<AppStore['missionState']>) => void;
+    setAuthState: (update: Partial<Pick<AppStore, 'authToken' | 'isAuthenticated' | 'githubUser'>>) => void;
+    setUserProfile: (update: Partial<AppStore['userProfile']>) => void;
+    setSkillFingerprint: (data: AppStore['skillFingerprint']) => void;
+    setFingerprintLoading: (loading: boolean) => void;
+    setShowAuthModal: (show: boolean) => void;
+    setShowOnboardingModal: (show: boolean) => void;
 }
 
 export const useAppStore = create<AppStore>((set) => ({
@@ -87,6 +105,13 @@ export const useAppStore = create<AppStore>((set) => ({
         language: "english",
         goal: "learning",
     },
+    authToken: null,
+    isAuthenticated: false,
+    githubUser: null,
+    skillFingerprint: null,
+    fingerprintLoading: false,
+    showAuthModal: false,
+    showOnboardingModal: false,
 
     setMode: (mode) => set({ mode }),
     setRepoUrl: (repoUrl) => set({ repoUrl }),
@@ -106,4 +131,12 @@ export const useAppStore = create<AppStore>((set) => ({
     setMissionState: (update) => set((state) => ({
         missionState: { ...state.missionState, ...update }
     })),
+    setAuthState: (update) => set(update),
+    setUserProfile: (update) => set((state) => ({
+        userProfile: { ...state.userProfile, ...update }
+    })),
+    setSkillFingerprint: (skillFingerprint) => set({ skillFingerprint }),
+    setFingerprintLoading: (fingerprintLoading) => set({ fingerprintLoading }),
+    setShowAuthModal: (showAuthModal) => set({ showAuthModal }),
+    setShowOnboardingModal: (showOnboardingModal) => set({ showOnboardingModal }),
 }));

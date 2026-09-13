@@ -22,3 +22,8 @@ chromadb==0.6.3
 # Phase 2 — Streamlit tester (install separately in tester/ venv or use same venv)
 streamlit==1.42.2
 pandas==2.2.3
+
+# Phase 9 — Identity Layer (JWT, token encryption, persistent store)
+pyjwt==2.10.1
+cryptography==43.0.3
+sqlalchemy==2.0.36

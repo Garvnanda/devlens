@@ -1,14 +1,15 @@
-import { useMemo, useRef, useState, useCallback, useEffect } from 'react';
+import { useMemo, useRef, useCallback, useEffect } from 'react';
 import ForceGraph3D from 'react-force-graph-3d';
 import { useAppStore } from '../../store/useAppStore';
-import { createNodeMaterial } from './GraphEffects';
-import { Mesh, SphereGeometry, Group } from 'three';
+import { connectedNodes, createNodeMaterial, folderColors } from './GraphEffects';
+import { Mesh, Group } from 'three';
 import SpriteText from 'three-spritetext';
+
+const idOf = (end: any) => (typeof end === 'object' ? end.id : end);
 
 export const MolecularGraph = () => {
     const { graphData, blastTarget, selectedFile, setSelectedFile } = useAppStore(state => state);
     const graphRef = useRef<any>(null);
-    const [hoverNode, setHoverNode] = useState<string | null>(null);
     const forcesApplied = useRef(false);
 
     // ── Filter to only connected nodes + pre-spread positions ──
@@ -16,20 +17,7 @@ export const MolecularGraph = () => {
         if (!graphData) return null;
 
         const links = graphData.links || [];
-
-        // Collect IDs that appear in at least one edge
-        const connectedIds = new Set<string>();
-        links.forEach((l: any) => {
-            const src = typeof l.source === 'object' ? l.source.id : l.source;
-            const tgt = typeof l.target === 'object' ? l.target.id : l.target;
-            connectedIds.add(src);
-            connectedIds.add(tgt);
-        });
-
-        // Keep only connected nodes
-        const filteredNodes = connectedIds.size > 0
-            ? graphData.nodes.filter((n: any) => connectedIds.has(n.id))
-            : graphData.nodes; // fallback: show all if no edges exist
+        const filteredNodes = connectedNodes(graphData);
 
         // Pre-assign random 3D positions so they don't stack at origin
         const R = 300;
@@ -44,22 +32,30 @@ export const MolecularGraph = () => {
             };
         });
 
-        // Also filter links to only include those between remaining nodes
         const nodeIdSet = new Set(nodes.map((n: any) => n.id));
-        const filteredLinks = links.filter((l: any) => {
-            const src = typeof l.source === 'object' ? l.source.id : l.source;
-            const tgt = typeof l.target === 'object' ? l.target.id : l.target;
-            return nodeIdSet.has(src) && nodeIdSet.has(tgt);
-        });
+        const filteredLinks = links.filter((l: any) => nodeIdSet.has(idOf(l.source)) && nodeIdSet.has(idOf(l.target)));
 
-        forcesApplied.current = false; // reset for new data
+        forcesApplied.current = false;
         return { nodes, links: filteredLinks };
     }, [graphData]);
+
+    const colors = useMemo(() => folderColors(spreadGraphData?.nodes ?? []), [spreadGraphData]);
+
+    // Neighbours of the blast target, computed once instead of scanning every link per node.
+    const blastNeighbours = useMemo(() => {
+        const set = new Set<string>();
+        if (!blastTarget || !spreadGraphData) return set;
+        spreadGraphData.links.forEach((l: any) => {
+            const s = idOf(l.source), t = idOf(l.target);
+            if (s === blastTarget) set.add(t);
+            if (t === blastTarget) set.add(s);
+        });
+        return set;
+    }, [blastTarget, spreadGraphData]);
 
     // ── Apply strong repulsion forces after graph mounts ──
     useEffect(() => {
         if (!spreadGraphData || forcesApplied.current) return;
-        // Short delay to ensure ForceGraph3D ref is populated
         const timer = setTimeout(() => {
             const fg = graphRef.current;
             if (fg) {
@@ -71,12 +67,10 @@ export const MolecularGraph = () => {
         return () => clearTimeout(timer);
     }, [spreadGraphData]);
 
-    // ── Orbit camera around clicked node ──
+    // ── Orbit camera around blast target ──
     useEffect(() => {
-        if (!blastTarget) return;
-        const data = spreadGraphData;
-        if (!data) return;
-        const node = data.nodes.find((n: any) => n.id === blastTarget);
+        if (!blastTarget || !spreadGraphData) return;
+        const node = spreadGraphData.nodes.find((n: any) => n.id === blastTarget);
         if (!node) return;
 
         let frameId: number;
@@ -86,13 +80,8 @@ export const MolecularGraph = () => {
         const startTime = Date.now() + 1200;
 
         const orbit = () => {
-            const now = Date.now();
-            if (now < startTime) {
-                frameId = requestAnimationFrame(orbit);
-                return;
-            }
-            angle += speed;
-            if (graphRef.current) {
+            if (Date.now() >= startTime && graphRef.current) {
+                angle += speed;
                 graphRef.current.cameraPosition(
                     {
                         x: node.x + radius * Math.cos(angle),
@@ -109,22 +98,39 @@ export const MolecularGraph = () => {
         return () => cancelAnimationFrame(frameId);
     }, [blastTarget, spreadGraphData]);
 
-    // ── Click handler: zoom + orbit ──
     const handleNodeClick = useCallback((node: any) => {
         setSelectedFile(node.id);
         useAppStore.getState().setBlastTarget(node.id);
-        if (graphRef.current) {
-            graphRef.current.cameraPosition(
-                { x: node.x + 60, y: node.y + 30, z: node.z + 60 },
-                node,
-                800
-            );
-        }
+        graphRef.current?.cameraPosition({ x: node.x + 60, y: node.y + 30, z: node.z + 60 }, node, 800);
     }, [setSelectedFile]);
 
-    const handleNodeHover = useCallback((node: any) => {
-        setHoverNode(node ? node.id : null);
-    }, []);
+    // Stable accessor: only rebuilds node objects when colours/selection actually change (not on hover).
+    const nodeThreeObject = useCallback((node: any) => {
+        const isSelected = selectedFile === node.id || blastTarget === node.id;
+        const isDimmed = !!blastTarget && !isSelected && !blastNeighbours.has(node.id);
+        const color = colors.colorOf(node.id);
+        const { material, geometry, scale } = createNodeMaterial(color, isSelected || blastNeighbours.has(node.id), isDimmed);
+
+        const group = new Group();
+        group.add(new Mesh(geometry, material));
+
+        const label = new SpriteText(String(node.id).split('/').pop() || node.id);
+        label.color = isDimmed ? '#334155' : '#E2E8F0';
+        label.textHeight = 4;
+        label.backgroundColor = 'rgba(0,0,0,0.6)';
+        label.padding = 2;
+        label.position.y = 14 * scale;
+        group.add(label);
+        return group;
+    }, [colors, selectedFile, blastTarget, blastNeighbours]);
+
+    const isBlastLink = useCallback(
+        (l: any) => !!blastTarget && (idOf(l.source) === blastTarget || idOf(l.target) === blastTarget),
+        [blastTarget]
+    );
+    const linkColor = useCallback((l: any) => colors.colorOf(idOf(l.source)), [colors]);
+    const linkWidth = useCallback((l: any) => (isBlastLink(l) ? 2.2 : 0.8), [isBlastLink]);
+    const linkParticles = useCallback((l: any) => (isBlastLink(l) ? 4 : 0), [isBlastLink]);
 
     if (!spreadGraphData) return null;
 
@@ -135,49 +141,17 @@ export const MolecularGraph = () => {
                 graphData={spreadGraphData}
                 nodeRelSize={8}
                 warmupTicks={0}
-                linkColor={() => '#ffffff'}
-                linkWidth={() => 1.2}
-                linkOpacity={0.6}
+                linkColor={linkColor}
+                linkWidth={linkWidth}
+                linkOpacity={0.45}
+                linkDirectionalParticles={linkParticles}
+                linkDirectionalParticleWidth={2.5}
+                linkDirectionalParticleSpeed={0.008}
                 cooldownTicks={200}
-                backgroundColor="#0F172A"
+                backgroundColor="#000000"
                 enableNodeDrag={false}
                 onNodeClick={handleNodeClick}
-                onNodeHover={handleNodeHover}
-                nodeThreeObject={(node: any) => {
-                    const isDependency = blastTarget && spreadGraphData.links.some((l: any) =>
-                        (l.source.id === blastTarget && l.target.id === node.id) ||
-                        (l.target.id === blastTarget && l.source.id === node.id) ||
-                        (l.source === blastTarget && l.target === node.id) ||
-                        (l.target === blastTarget && l.source === node.id)
-                    );
-
-                    const isSelected = selectedFile === node.id || blastTarget === node.id;
-                    const isHovered = hoverNode === node.id;
-                    const isDimmed = !!blastTarget && blastTarget !== node.id && !isDependency;
-
-                    const { material, scale, emissiveIntensity } = createNodeMaterial(isHovered, isSelected || !!isDependency, isDimmed);
-
-                    const geometry = new SphereGeometry(8 * scale);
-                    material.emissive.setHex(0x06B6D4);
-                    material.emissiveIntensity = emissiveIntensity;
-
-                    const sphere = new Mesh(geometry, material);
-
-                    // Short filename label
-                    const shortName = String(node.id).split('/').pop() || node.id;
-                    const label = new SpriteText(shortName);
-                    label.color = isDimmed ? '#475569' : '#E2E8F0';
-                    label.textHeight = 4;
-                    label.backgroundColor = 'rgba(0,0,0,0.6)';
-                    label.padding = 2;
-                    label.position.y = 14 * scale;
-
-                    const group = new Group();
-                    group.add(sphere);
-                    group.add(label);
-
-                    return group;
-                }}
+                nodeThreeObject={nodeThreeObject}
             />
         </div>
     );
