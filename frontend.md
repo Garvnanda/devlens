@@ -1,4 +1,52 @@
 DevLens Frontend Architecture — Cinematic CLI Operating System (Vite Edition)
+
+## STATUS & REMAINING WORK (verified against `devlens-frontend/`, 2026-09-13)
+
+Phases 1-6 below are already built in `devlens-frontend/`: CLI engine, molecular graph + blast animation, focus/intent/explain panels, a 2D feature explorer (in place of the spec'd radial Feature Tree, functionally equivalent), and the Architect panel (Phase 6 in this doc — matches backend Phase 7). All ✅ Backend Linked notes for `ingest`, `graph`, `intent`, `explain`, `chatbot`, and `gatekeeper` are correct and live — this doc's old "Backend Pending" markers for those are stale.
+
+**Not built yet (do these, roughly in order):**
+
+1. **Hardening (blocks nothing else, do first, small):**
+   - `search <query>` command + a results panel — `POST /api/v1/search` has zero frontend caller today.
+   - Onboarding/calibration modal (level/language/goal → `useAppStore.userProfile`) — nothing sets this today, every persona-aware call uses whatever default ships in the store.
+   - Decide on `AIHologram.tsx` (spec'd in §4 below, `hologram.png` asset sits unused) and the howler sound layer (§11, installed but unwired) — build or explicitly drop.
+
+Owners below match the backend track split in `implementation-garv.md` (Track A / Identity & Data) and `implementation-haragam.md` (Track B / Security & Automation) — same person owns both ends of a feature wherever possible, so the "endpoint shipped, UI never wired" gap from Phase 7/8 doesn't repeat itself.
+
+2. **New frontend work for Phase 9 (Identity Layer) — Garv:**
+   - GitHub OAuth login flow (redirect to `/api/v1/auth/github/login`, handle callback, store the JWT — never the raw GitHub token).
+   - Session-aware CLI: signed-in state shown in the terminal header/HUD; `logout` command.
+   - Skill Fingerprint display — replaces the (still-missing) manual onboarding modal as the *default* profile source once a user signs in; manual override stays available in the modal from item 1.
+
+3. **New frontend work for Phase 10 (Global Radar) — Garv:**
+   - `search-global <query>` command (distinct from the Phase 1 `search` above — this hits `/api/v1/search/global`, not the ingested-repo index) + a results list panel showing issue classification badges (Bug/Feature/Docs/Security/Good-First-Issue) and the "already claimed?" flag.
+
+4. **New frontend work for Phase 11 (Trust Layer) — Haragam:**
+   - `scan <repo>` command + a findings panel: dependency CVEs from OSV.dev and secret-leak warnings, surfaced also as extra warning lines in the existing `gatecheck` output.
+
+5. **New frontend work for Phase 12 (Living Map polish, do last) — Haragam:**
+   - Semantic-cluster layout + churn-score node coloring in `MolecularGraph.tsx` (uses embeddings + PR churn, both already fetched elsewhere). Reassigned here (originally unowned) because Haragam also owns the matching new backend endpoints — see `implementation-haragam.md`.
+   - File/repo instant-summary panel (`GET /api/v1/summary/...`) — a lighter-weight sibling to the existing `IntentPanel`.
+
+6. **New frontend work for Phase 13 (What-If Engine) — Haragam:**
+   - `impact <file>` command + a risk panel (Low/Medium/High + affected files + tests to re-run). Requires Garv's Phase 9 sign-in flow to exist first — an integration checkpoint, not a blocker on starting the UI shell.
+
+7. **New frontend work for Phase 14 (Memory & Motivation) — Garv:**
+   - "Pick up where you left off" resume state on login (`GET /api/v1/memory/dashboard`).
+   - Contest/opportunity radar panel, streak/badge display, public portfolio page (this one likely needs to break the "no traditional pages" rule in §1 — it's meant to be shared as a URL to a third party, not just used inside the CLI cockpit; flag this conflict explicitly when it comes up rather than silently bending the rule).
+
+8. **New frontend work for Phase 15 (Maintainer Mode) — Haragam:**
+   - A genuinely separate dashboard surface (triage queue, PR review actions) — biggest architectural exception to the CLI-only philosophy in this doc. Plan its UI contract explicitly before building; don't retrofit it into the terminal metaphor by force.
+
+9. **New frontend work for Phase 16 (Safety Net) — Haragam:**
+   - Test-generation result panel/diff view, reachable both from an active Architect mission (contributor side) and from the future Maintainer dashboard (reviewer side) — one component, two entry points, per the backend's own "no duplicated logic" note.
+
+**Load check:** Garv ends up with the heavier frontend surface (full OAuth flow + 3 Phase-14 UI pieces, one of which breaks the CLI-only rule). That's why Phase 12's frontend work (item 5) — originally unowned — went to Haragam instead of staying a toss-up, and why Haragam also picks up the matching *backend* summary/churn endpoints in `implementation-haragam.md` rather than leaving Phase 12 backend unassigned. Re-balance again if Phase 14's portfolio page turns out bigger than it looks.
+
+**Hardening item ownership (from §1 above):** `search` command → Haragam (pairs with his growing command-surface ownership); onboarding modal → Garv (feeds directly into his Phase 9 skill-fingerprint/persona work — no point building it twice).
+
+---
+
 0. CORE PHILOSOPHY
 
 DevLens frontend is:

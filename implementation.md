@@ -1,3 +1,24 @@
+## STATUS OVERVIEW (verified against codebase, 2026-09-13)
+
+Phases 1-8 below are **all implemented**, backend and frontend, contrary to earlier drafts of `implemented.md`. Full detail lives in `implemented.md` — short version:
+
+| Phase | Status |
+| :--- | :--- |
+| 1 — Skeleton & Ingestion | ✅ Done |
+| 2 — Brain & Map (Vector Pipeline, Graph) | ⚠️ Done but vectorize is never auto-triggered on ingest — see Hardening Task 1 |
+| 3 — Intelligence Features (Search, Explain, Intent) | ⚠️ Explain/Intent done + wired; Search backend done, **no frontend command** |
+| 4 — Polish & Production (rate limits, fat-repo check, deploy) | ✅ Done (deploy config: see `render.yaml`) |
+| 5 — Resilience/Security/Institutional Memory | ✅ Done |
+| 6 — Bharat & Contributor Modules | ✅ Done |
+| 7 — DevLens Architect (agentic chatbot) | ✅ Done (`architect_agent.py`, wired via `architect <issue>`) |
+| 8 — Personalization & Feasibility | ⚠️ Gatekeeper done + wired; persona engine done but **no onboarding UI** to set it |
+
+**Before Phase 9 starts:** three small hardening fixes (auto-vectorize, search command, onboarding modal) — see `implemented.md` §5.
+
+**Phase 9 onward:** split by owner — `implementation-haragam.md` (Track B: Security & Automation — Phase 11, 16, 13, 15 + Phase 12 summary/churn work) and `implementation-garv.md` (Track A: Identity & Data — Phase 9, 10, 14). Both docs carry the same shared integration-checks list.
+
+---
+
 ### **The Stack Strategy**
 
 * **Frontend:** React \+ Tailwind CSS \+ react-force-graph (for the visualization) \+ framer-motion (for "crazy" animations).  
